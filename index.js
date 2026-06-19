@@ -9,7 +9,7 @@ import Database from 'better-sqlite3';
 import { Bot } from 'grammy';
 
 const PORT = process.env.PORT || 3000;
-const { VERIFY_TOKEN, META_APP_SECRET, IG_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } = process.env;
+const { VERIFY_TOKEN, META_APP_SECRET, IG_ACCESS_TOKEN, IG_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } = process.env;
 const SELFTEST = process.argv.includes('--selftest');
 
 // --- light db (sqlite) ---
@@ -39,6 +39,19 @@ function validSignature(rawBody, header, secret = META_APP_SECRET) {
 
 // IG webhook timestamps come as s or ms — normalize to ms
 const toMs = (t) => { const n = Number(t); return n ? (n < 1e12 ? n * 1000 : n) : Date.now(); };
+
+// igsid -> "Name (@username)"; cached in memory (ponytail: refetched on restart, cheap)
+const profileCache = new Map();
+async function displayName(igsid) {
+  if (profileCache.has(igsid)) return profileCache.get(igsid);
+  let label = igsid;
+  try {
+    const r = await fetch(`https://graph.instagram.com/v25.0/${igsid}?fields=name,username&access_token=${IG_ACCESS_TOKEN}`);
+    if (r.ok) { const p = await r.json(); if (p.username) label = `${p.name || p.username} (@${p.username})`; }
+  } catch { /* fall back to raw igsid */ }
+  profileCache.set(igsid, label);
+  return label;
+}
 
 async function sendIG(igsid, text) {
   const res = await fetch('https://graph.instagram.com/v25.0/me/messages', {
@@ -86,17 +99,22 @@ function main() {
     }
     if (body.field === 'messages' && body.value) items.push(body.value);
     for (const m of items) {
-      const igsid = m.sender?.id, text = m.message?.text;
+      const igsid = m.sender?.id;
+      if (igsid === IG_ACCOUNT_ID || m.message?.is_echo) continue;   // our own outgoing message echoed back
+      if (m.read || m.delivery || m.reaction) continue;             // read/delivery receipts, reactions
+      const text = m.message?.text;
       if (text === undefined) { console.log('non-text event:', JSON.stringify(m)); continue; }
       const info = q.insertIn.run(igsid, text, toMs(m.timestamp));
-      const sent = await bot.api.sendMessage(TELEGRAM_CHAT_ID, `📩 IG ${igsid}\n${text}`);
+      const who = await displayName(igsid);
+      const sent = await bot.api.sendMessage(TELEGRAM_CHAT_ID, `📩 ${who}\n${text}`);
       q.setTg.run(sent.message_id, info.lastInsertRowid);
-      console.log(`DM from ${igsid}: ${text} -> tg ${sent.message_id}`);
+      console.log(`DM from ${who} [${igsid}]: ${text} -> tg ${sent.message_id}`);
     }
   }
 
   http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === '/' && req.method === 'GET') { res.writeHead(200).end('ok'); return; }
     if (url.pathname !== '/webhook') { res.writeHead(404).end(); return; }
 
     if (req.method === 'GET') {                              // Meta verification handshake

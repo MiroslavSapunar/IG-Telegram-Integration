@@ -1,0 +1,21 @@
+app = "ig-telegram-integration"
+primary_region = "gru"   # São Paulo (closest established Fly region to Argentina)
+
+[build]
+
+[env]
+  PORT = "3000"
+  DB_PATH = "/data/data.db"
+
+# Single always-on machine: Telegram long-polling allows only one getUpdates
+# consumer per bot token, and SQLite lives on one volume. Do not scale > 1.
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[mounts]
+  source = "ig_data"
+  destination = "/data"
