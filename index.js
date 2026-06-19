@@ -251,11 +251,14 @@ function main() {
     } catch (e) { console.error('mark topic:', e.description || e.message); }
   }
 
-  // create a fresh forum topic for this user and (re)store the mapping
+  // create a fresh forum topic for this user and (re)store the mapping.
+  // topics are only created from an inbound DM, so start already marked unread (✉️ in the name)
+  // to avoid a create-then-rename and its noisy "renamed the topic" service message.
   async function createTopic(igsid) {
     const name = (await displayName(igsid)).slice(0, 128);
-    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, name);
+    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, `✉️ ${name}`.slice(0, 128));
     q.insertThread.run(igsid, topic.message_thread_id, name, Date.now());
+    q.setUnread.run(1, igsid);                                   // store base name, flag unread
     console.log(`created topic ${topic.message_thread_id} for ${name}`);
     return topic.message_thread_id;
   }
