@@ -1,0 +1,13 @@
+{
+  "name": "ig-telegram-integration",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "selftest": "node index.js --selftest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "grammy": "^1.30.0"
+  }
+}
