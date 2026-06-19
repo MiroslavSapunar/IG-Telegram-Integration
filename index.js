@@ -1,5 +1,7 @@
 // IG DM <-> Telegram bridge (no AI yet).
-//   IG DM -> webhook -> Telegram group; member replies-to-message -> back to IG.
+//   IG DM -> webhook -> a per-user Telegram forum *topic*; a member typing in
+//   that topic -> reply sent back to the IG user.
+//   Requires a supergroup with Topics enabled + bot = admin with "Manage Topics".
 // run:       node --env-file=.env index.js   (or npm start)
 // self-test: node index.js --selftest
 // expose:    cloudflared tunnel --url http://localhost:3000   (Meta needs HTTPS)
@@ -19,14 +21,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS messages(
   igsid TEXT NOT NULL,
   direction TEXT NOT NULL,        -- 'in' | 'out'
   text TEXT,
-  created_at INTEGER NOT NULL,    -- unix ms
-  tg_message_id INTEGER           -- telegram msg id (inbound only) for reply routing
+  created_at INTEGER NOT NULL     -- unix ms
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS threads(
+  igsid TEXT PRIMARY KEY,
+  thread_id INTEGER NOT NULL,     -- telegram forum topic id
+  name TEXT,
+  created_at INTEGER NOT NULL
 )`);
 const q = {
-  insertIn:  db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
-  setTg:     db.prepare(`UPDATE messages SET tg_message_id=? WHERE id=?`),
-  insertOut: db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'out', ?, ?)`),
-  igsidByTg: db.prepare(`SELECT igsid FROM messages WHERE tg_message_id=?`),
+  insertIn:      db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
+  insertOut:     db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'out', ?, ?)`),
+  threadByIgsid: db.prepare(`SELECT thread_id FROM threads WHERE igsid=?`),
+  igsidByThread: db.prepare(`SELECT igsid FROM threads WHERE thread_id=?`),
+  insertThread:  db.prepare(`INSERT INTO threads(igsid,thread_id,name,created_at) VALUES(?,?,?,?)`),
 };
 
 // Meta signs the raw body: "x-hub-signature-256: sha256=<hmac>"
@@ -76,20 +84,31 @@ function main() {
   // helper to find the group's chat id: type /id in the group
   bot.command('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
 
-  // a member replies to a forwarded DM -> relay text back to that IG user
+  // a member typing inside a user's topic -> relay text back to that IG user
   bot.on('message:text', async (ctx) => {
-    const replyTo = ctx.message.reply_to_message?.message_id;
-    if (!replyTo) return;                                   // only replies route to IG
-    const row = q.igsidByTg.get(replyTo);
-    if (!row) { await ctx.reply('⚠️ no IG conversation mapped to this message'); return; }
+    const threadId = ctx.message.message_thread_id;
+    if (!threadId || ctx.message.text.startsWith('/')) return;  // General topic / commands
+    const row = q.igsidByThread.get(threadId);
+    if (!row) return;                                           // not a mapped topic
     try {
       await sendIG(row.igsid, ctx.message.text);
       q.insertOut.run(row.igsid, ctx.message.text, Date.now());
     } catch (e) {
-      await ctx.reply(`❌ IG send failed: ${e.message}`);   // e.g. outside 24h window
+      await ctx.reply(`❌ IG send failed: ${e.message}`);       // e.g. outside 24h window
     }
   });
   bot.start({ onStart: () => console.log('telegram bot polling') });
+
+  // find or create this user's forum topic (persisted so it survives restarts)
+  async function threadFor(igsid) {
+    const existing = q.threadByIgsid.get(igsid);
+    if (existing) return existing.thread_id;
+    const name = (await displayName(igsid)).slice(0, 128);
+    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, name);
+    q.insertThread.run(igsid, topic.message_thread_id, name, Date.now());
+    console.log(`created topic ${topic.message_thread_id} for ${name}`);
+    return topic.message_thread_id;
+  }
 
   async function handleEvent(body) {
     const items = [];
@@ -104,11 +123,10 @@ function main() {
       if (m.read || m.delivery || m.reaction) continue;             // read/delivery receipts, reactions
       const text = m.message?.text;
       if (text === undefined) { console.log('non-text event:', JSON.stringify(m)); continue; }
-      const info = q.insertIn.run(igsid, text, toMs(m.timestamp));
-      const who = await displayName(igsid);
-      const sent = await bot.api.sendMessage(TELEGRAM_CHAT_ID, `📩 ${who}\n${text}`);
-      q.setTg.run(sent.message_id, info.lastInsertRowid);
-      console.log(`DM from ${who} [${igsid}]: ${text} -> tg ${sent.message_id}`);
+      q.insertIn.run(igsid, text, toMs(m.timestamp));
+      const threadId = await threadFor(igsid);
+      await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, { message_thread_id: threadId });
+      console.log(`DM from ${igsid} -> topic ${threadId}: ${text}`);
     }
   }
 
@@ -146,9 +164,10 @@ function selftest() {
   const sig = 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
   assert(validSignature(body, sig, secret), 'valid signature passes');
   assert(!validSignature(body, 'sha256=bad', secret), 'bad signature fails');
-  // reply routing: inbound -> tg map -> reply finds the IGSID
-  const r = q.insertIn.run('IG123', 'hola', 1000); q.setTg.run(555, r.lastInsertRowid);
-  assert(q.igsidByTg.get(555)?.igsid === 'IG123', 'reply routes to correct IGSID');
-  assert(q.igsidByTg.get(999) === undefined, 'unknown tg message routes nowhere');
+  // topic routing: igsid <-> thread_id persisted both ways
+  q.insertThread.run('IG123', 555, 'Karnaza (@k4rn4z4)', 1000);
+  assert(q.igsidByThread.get(555)?.igsid === 'IG123', 'topic routes to correct IGSID');
+  assert(q.threadByIgsid.get('IG123')?.thread_id === 555, 'igsid maps to its topic');
+  assert(q.igsidByThread.get(999) === undefined, 'unknown topic routes nowhere');
   console.log('selftest OK');
 }

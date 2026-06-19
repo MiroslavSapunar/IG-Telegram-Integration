@@ -15,9 +15,9 @@ Current (implemented, no AI yet):
 1. DM arrives on Instagram
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
-4. Server forwards the DM to the Telegram group: `📩 IG <igsid>\n<text>`
-5. A union member *replies to that message* in Telegram
-6. Server maps the reply to the sender's IGSID and sends it back via the IG API (within the 24h window)
+4. Server forwards the DM into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`)
+5. A union member types a reply **inside that topic**
+6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
 Planned (Phase 4): before step 4, Claude reads the message + FAQ context and the forwarded
 card carries an AI-suggested reply the member can approve or edit.
@@ -70,14 +70,14 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - `POST /webhook`: validates `x-hub-signature-256`, acks 200, forwards the DM to Telegram
 
 ### 2. Telegram bot (`grammy`, long-polling)
-- Private group with union members
-- Forwards each incoming IG DM as a message
-- Reply routing: a member *replies* to the forwarded message → mapped to the IGSID → sent to IG
-- `/id` command prints the group's chat id
+- Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM)
+- Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
+- Requires the bot to be admin with "Manage Topics"
+- `/id` command prints the chat id
 
 ### 3. Storage (SQLite, `better-sqlite3`)
-- `messages` table: `igsid`, `direction` (in/out), `text`, `created_at`, `tg_message_id`
-- Persists conversation history (follow-ups + dates) and maps Telegram replies → IGSID
+- `messages` table: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
+- `threads` table: `igsid` ↔ `thread_id` (forum topic) — persistent reply routing across restarts
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit
@@ -104,3 +104,16 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 5. (Phase 4) Claude API key from console.anthropic.com
 
 See the README for the step-by-step run/setup guide.
+
+
+Fly.io details:
+                  ID: vol_4oje010p2geo3ypr
+                Name: ig_data
+                 App: ig-telegram-integration
+              Region: gru
+                Zone: 2237
+             Size GB: 1
+           Encrypted: true
+          Created at: 19 Jun 26 17:22 UTC
+  Snapshot retention: 5
+ Scheduled snapshots: true
