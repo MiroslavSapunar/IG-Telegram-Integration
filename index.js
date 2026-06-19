@@ -42,7 +42,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS fwd(
 const q = {
   insertIn:      db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
   insertOut:     db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'out', ?, ?)`),
-  threadByIgsid: db.prepare(`SELECT thread_id FROM threads WHERE igsid=?`),
   igsidByThread: db.prepare(`SELECT igsid FROM threads WHERE thread_id=?`),
   threadName:    db.prepare(`SELECT name FROM threads WHERE thread_id=?`),
   threadFull:    db.prepare(`SELECT thread_id, name, unread FROM threads WHERE igsid=?`),
@@ -143,9 +142,7 @@ function main() {
     if (!replied) return ctx.reply('Respondé a un mensaje y luego /general para copiarlo al tema General.');
     const chatC = String(ctx.chat.id).replace(/^-100/, '');         // t.me/c link uses id without -100
     const tid = replied.message_thread_id;
-    const link = tid
-      ? `https://t.me/c/${chatC}/${tid}/${replied.message_id}`
-      : `https://t.me/c/${chatC}/${replied.message_id}`;
+    const link = `https://t.me/c/${chatC}/${tid ? tid + '/' : ''}${replied.message_id}`;
     const name = (tid && q.threadName.get(tid)?.name) || 'la conversación';
     try {
       await ctx.api.copyMessage(ctx.chat.id, ctx.chat.id, replied.message_id, { // no thread_id -> General
@@ -266,7 +263,7 @@ function main() {
   // forward into the user's topic; if the topic was deleted in Telegram, recreate and resend.
   // returns the sent Telegram Message.
   async function forwardToTopic(igsid, text) {
-    let threadId = q.threadByIgsid.get(igsid)?.thread_id ?? await createTopic(igsid);
+    let threadId = q.threadFull.get(igsid)?.thread_id ?? await createTopic(igsid);
     try {
       return await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, { message_thread_id: threadId });
     } catch (e) {
@@ -335,11 +332,11 @@ function selftest() {
   // topic routing: igsid <-> thread_id persisted both ways
   q.insertThread.run('IG123', 555, 'Karnaza (@k4rn4z4)', 1000);
   assert(q.igsidByThread.get(555)?.igsid === 'IG123', 'topic routes to correct IGSID');
-  assert(q.threadByIgsid.get('IG123')?.thread_id === 555, 'igsid maps to its topic');
+  assert(q.threadFull.get('IG123')?.thread_id === 555, 'igsid maps to its topic');
   assert(q.igsidByThread.get(999) === undefined, 'unknown topic routes nowhere');
   // recreate after a deleted topic: REPLACE swaps the mapping to the new id
   q.insertThread.run('IG123', 777, 'Karnaza (@k4rn4z4)', 2);
-  assert(q.threadByIgsid.get('IG123')?.thread_id === 777, 'recreate replaces thread_id');
+  assert(q.threadFull.get('IG123')?.thread_id === 777, 'recreate replaces thread_id');
   assert(q.igsidByThread.get(555) === undefined, 'old (deleted) topic id no longer maps');
   // unread marker flag round-trip
   q.insertThread.run('IGm', 321, 'Name', Date.now());

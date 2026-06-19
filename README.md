@@ -99,6 +99,6 @@ End-to-end:
 ## Files
 
 - `index.js` — the whole bridge: webhook server + Telegram bot + SQLite (deps: `grammy`, `better-sqlite3`)
-- `test-ig.js` — throwaway: verify the IG token and fetch profile/conversations
 - `data.db` — SQLite message log (gitignored)
 - `ARCHITECTURE.md` — design, Meta API constraints, and findings
+- `FLY.md` — Fly.io deploy cheatsheet
