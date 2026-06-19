@@ -79,16 +79,13 @@ const toMs = (t) => { const n = Number(t); return n ? (n < 1e12 ? n * 1000 : n) 
 // first plain-emoji reaction from a Telegram reaction list (custom/premium emoji have no unicode -> skip)
 const pickEmoji = (reactions) => reactions?.find((x) => x.type === 'emoji')?.emoji;
 
-// igsid -> "Name (@username)"; cached in memory (ponytail: refetched on restart, cheap)
-const profileCache = new Map();
+// igsid -> "Name (@username)"; only called when creating a topic (once per user), so no cache needed
 async function displayName(igsid) {
-  if (profileCache.has(igsid)) return profileCache.get(igsid);
   let label = igsid;
   try {
     const r = await fetch(`https://graph.instagram.com/v25.0/${igsid}?fields=name,username&access_token=${IG_ACCESS_TOKEN}`);
     if (r.ok) { const p = await r.json(); if (p.username) label = `${p.name || p.username} (@${p.username})`; }
   } catch { /* fall back to raw igsid */ }
-  profileCache.set(igsid, label);
   return label;
 }
 
