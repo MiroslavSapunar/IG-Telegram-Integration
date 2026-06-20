@@ -8,7 +8,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
-import { Bot } from 'grammy';
+import { Bot, InputFile } from 'grammy';
 
 const PORT = process.env.PORT || 3000;
 const { VERIFY_TOKEN, META_APP_SECRET, IG_ACCESS_TOKEN, IG_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } = process.env;
@@ -78,6 +78,14 @@ const toMs = (t) => { const n = Number(t); return n ? (n < 1e12 ? n * 1000 : n) 
 
 // first plain-emoji reaction from a Telegram reaction list (custom/premium emoji have no unicode -> skip)
 const pickEmoji = (reactions) => reactions?.find((x) => x.type === 'emoji')?.emoji;
+
+// IG attachment type -> grammy send method; shares/story_mention/unknown fall back to a link
+const SENDERS = { image: 'sendPhoto', video: 'sendVideo', audio: 'sendAudio', file: 'sendDocument' };
+async function download(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`download ${r.status}`);
+  return Buffer.from(await r.arrayBuffer());
+}
 
 // igsid -> "Name (@username)"; only called when creating a topic (once per user), so no cache needed
 async function displayName(igsid) {
@@ -257,16 +265,37 @@ function main() {
     return topic.message_thread_id;
   }
 
-  // forward into the user's topic; if the topic was deleted in Telegram, recreate and resend.
-  // returns the sent Telegram Message.
-  async function forwardToTopic(igsid, text) {
+  // send something into the user's topic; if the topic was deleted in Telegram, recreate and resend.
+  // `send(threadId)` returns the sent Telegram Message.
+  async function toUserTopic(igsid, send) {
     let threadId = q.threadFull.get(igsid)?.thread_id ?? await createTopic(igsid);
     try {
-      return await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, { message_thread_id: threadId });
+      return await send(threadId);
     } catch (e) {
       if (!/thread not found|topic.*delet|thread_id_invalid/i.test(e.description || e.message || '')) throw e;
       threadId = await createTopic(igsid);                       // stale/deleted topic -> recreate
-      return await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, { message_thread_id: threadId });
+      return await send(threadId);
+    }
+  }
+
+  const forwardToTopic = (igsid, text) =>
+    toUserTopic(igsid, (tid) => bot.api.sendMessage(TELEGRAM_CHAT_ID, text, { message_thread_id: tid }));
+
+  // download an IG attachment and re-upload it to the topic; shares/unknown/failures -> link
+  async function forwardAttachment(igsid, att) {
+    const url = att.payload?.url;
+    if (!url) return null;
+    const method = SENDERS[att.type];
+    const asLink = (note = '') => toUserTopic(igsid, (tid) =>
+      bot.api.sendMessage(TELEGRAM_CHAT_ID, `📎 ${att.type}${note}: ${url}`, { message_thread_id: tid }));
+    if (!method) return asLink();                                // share / story_mention / etc.
+    try {
+      const buf = await download(url);
+      return await toUserTopic(igsid, (tid) =>
+        bot.api[method](TELEGRAM_CHAT_ID, new InputFile(buf, att.type), { message_thread_id: tid }));
+    } catch (e) {
+      console.error('media forward:', e.message);
+      return asLink(' (no se pudo cargar)').catch(() => null);   // at least deliver the link
     }
   }
 
@@ -283,12 +312,17 @@ function main() {
       if (m.read || m.delivery || m.reaction) continue;             // read/delivery receipts, reactions
       if (isBlocked(igsid)) { console.log(`blocked ${igsid} — dropped`); continue; }
       const text = m.message?.text;
-      if (text === undefined) { console.log('non-text event:', JSON.stringify(m)); continue; }
-      q.insertIn.run(igsid, text, toMs(m.timestamp));
-      const sent = await forwardToTopic(igsid, text);
-      if (m.message?.mid) q.insertFwd.run(sent.message_id, igsid, m.message.mid); // for reaction passthrough
+      const attachments = m.message?.attachments ?? [];
+      if (text === undefined && !attachments.length) { console.log('non-text event:', JSON.stringify(m)); continue; }
+      const summary = text ?? `[${attachments.map((a) => a.type).join(', ')}]`;
+      q.insertIn.run(igsid, summary, toMs(m.timestamp));
+      const mid = m.message?.mid;
+      const forwarded = [];
+      if (text !== undefined) forwarded.push(await forwardToTopic(igsid, text));
+      for (const att of attachments) { const s = await forwardAttachment(igsid, att); if (s) forwarded.push(s); }
+      for (const s of forwarded) if (mid) q.insertFwd.run(s.message_id, igsid, mid); // reaction passthrough
       await setTopicMark(igsid, true);                              // user wrote last -> ✉️
-      console.log(`DM from ${igsid} -> topic ${sent.message_thread_id}: ${text}`);
+      console.log(`DM from ${igsid}: ${summary}`);
     }
   }
 
@@ -348,6 +382,9 @@ function selftest() {
   assert(pickEmoji([{ type: 'emoji', emoji: '👍' }]) === '👍', 'pick plain emoji');
   assert(pickEmoji([{ type: 'custom_emoji', custom_emoji_id: 'x' }]) === undefined, 'skip custom emoji');
   assert(pickEmoji([]) === undefined, 'no reaction -> unreact');
+  // attachment routing: known types map to a send method, shares fall back to a link
+  assert(SENDERS.image === 'sendPhoto' && SENDERS.video === 'sendVideo', 'media types map to send methods');
+  assert(SENDERS.share === undefined, 'share -> link fallback');
   // prune selection: a >1y-inactive topic is stale, a fresh one is kept
   q.insertThread.run('IGrecent', 888, 'recent', Date.now());
   q.insertThread.run('IGold', 900, 'old', Date.now() - 366 * 24 * 60 * 60 * 1000);
