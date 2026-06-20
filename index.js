@@ -139,9 +139,10 @@ const fmtLeft = (ms) => {
   return h ? `${h}h ${m}m` : `${m}m`;
 };
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+// returns the formatted open-topics report, or null when nothing is open (one query; caller decides what null means)
 function statusText(now = Date.now()) {
   const rows = q.openTopics.all();
-  if (!rows.length) return '✅ No hay temas abiertos.';
+  if (!rows.length) return null;
   const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');     // t.me/c link uses id without -100
   let warn = 0;
   const lines = rows.map((r) => {
@@ -263,7 +264,7 @@ async function main() {
     await ctx.deleteMessage().catch(() => {});
   });
   const STATUS_OPTS = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
-  bot.command('status', (ctx) => ctx.reply(statusText(), STATUS_OPTS));
+  bot.command('status', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
   bot.command('health', async (ctx) => {
     let ig;
     try {
@@ -346,8 +347,9 @@ async function main() {
   // every 2h, post the open-topics status into General so the whole team sees what's pending / about to expire.
   // stays quiet when nothing is open. General topic = sendMessage with no message_thread_id.
   setInterval(async () => {
-    if (!q.openTopics.all().length) return;
-    try { await bot.api.sendMessage(TELEGRAM_CHAT_ID, statusText(), STATUS_OPTS); }
+    const text = statusText();
+    if (!text) return;                                   // nothing open -> stay quiet (single query, no separate count)
+    try { await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, STATUS_OPTS); }
     catch (e) { console.error('status cron:', e.description || e.message); }
   }, 2 * 60 * 60 * 1000);
 
