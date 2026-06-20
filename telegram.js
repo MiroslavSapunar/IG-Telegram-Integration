@@ -290,8 +290,28 @@ export async function forwardAttachment(igsid, att) {
   }
 }
 
+// the autocomplete menu shown when you type "/" — kept here so it never drifts from the handlers above
+const COMMANDS = [
+  ['ayuda', 'Lista de comandos'],
+  ['manual', 'Guía rápida para responder'],
+  ['general', '(respondiendo) copiar el mensaje al tema General'],
+  ['resuelto', 'Marcar el tema como resuelto y cerrarlo'],
+  ['pendiente', 'Reabrir el tema como pendiente'],
+  ['bloquear', 'Dejar de reenviar los mensajes del usuario'],
+  ['desbloquear', 'Volver a reenviar sus mensajes'],
+  ['bloqueados', 'Lista de usuarios bloqueados'],
+  ['champions', 'Ranking de mensajes por miembro'],
+  ['estado', 'Temas abiertos y tiempo restante (24h)'],
+  ['servercheck', 'Estado del bot y del token de Instagram'],
+  ['purgar', 'Borrar temas inactivos hace +1 año'],
+  ['id', 'Mostrar el id del chat'],
+].map(([command, description]) => ({ command, description }));
+
 // start polling + the 2h status cron (called from index after initTopicIcon)
 export function startBot() {
+  // register the "/" autocomplete menu so it matches the handlers (no manual BotFather step)
+  bot.api.setMyCommands(COMMANDS).catch((e) => console.error('setMyCommands:', e.description || e.message));
+
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });
 
