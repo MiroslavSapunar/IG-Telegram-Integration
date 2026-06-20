@@ -15,8 +15,8 @@ Current (implemented, no AI yet):
 1. DM arrives on Instagram
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
-4. Server forwards the DM into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`)
-5. A union member types a reply **inside that topic**
+4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`), and marks the topic ✉️ pending
+5. A union member types a reply **inside that topic** (the ✉️ clears); an emoji reaction on a forwarded message is mirrored onto the IG message
 6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
 Planned (Phase 4): before step 4, Claude reads the message + FAQ context and the forwarded
@@ -70,14 +70,20 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - `POST /webhook`: validates `x-hub-signature-256`, acks 200, forwards the DM to Telegram
 
 ### 2. Telegram bot (`grammy`, long-polling)
-- Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM)
+- Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM, auto-recreated if deleted)
 - Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
+- Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
+- ✉️ unread marker on topics whose last message is from the user; cleared on reply
+- Emoji reaction on a forwarded message → mirrored onto the IG message (remove → unreact)
+- Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"
-- `/id` command prints the chat id
+- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/block` `/unblock` `/health` `/prune` `/id`
 
-### 3. Storage (SQLite, `better-sqlite3`)
-- `messages` table: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
-- `threads` table: `igsid` ↔ `thread_id` (forum topic) — persistent reply routing across restarts
+### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
+- `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
+- `threads`: `igsid` ↔ `thread_id` (forum topic) + `unread` flag — persistent routing + marker state
+- `blocked`: soft-blocked IGSIDs (also seedable via `BLOCKED_IGSIDS` env)
+- `fwd`: forwarded Telegram message → IG message id (`mid`), for reaction passthrough
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit
@@ -87,10 +93,10 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 
 ## Implementation Phases
 
-- ✅ **Phase 2 — Instagram Webhook**: verify (GET) + signed event handler (POST), DM parsing.
-- ✅ **Phase 3 — Telegram Bot**: BotFather bot, private group, IG DM → Telegram forwarding.
-- ✅ **Phase 5 — Reply Path**: member's Telegram reply → IG via `POST /me/messages`; messages persisted in SQLite.
-- ⏳ **Phase 6 — Deployment**: Dockerfile + Fly.io (volume for SQLite, stable webhook URL, secrets).
+- ✅ **Phase 2 — Instagram Webhook**: verify (GET) + signed event handler (POST), DM + media parsing.
+- ✅ **Phase 3 — Telegram Bot**: BotFather bot, supergroup with per-user topics, IG DM → Telegram forwarding, moderation/ops commands.
+- ✅ **Phase 5 — Reply Path**: member's Telegram reply → IG via `POST /me/messages`; reaction passthrough; messages persisted in SQLite.
+- ✅ **Phase 6 — Deployment**: multi-stage Dockerfile (~64 MB) + Fly.io (single machine, SQLite on a volume, secrets, stable webhook URL).
 - ⏳ **Phase 4 — Claude AI**: Claude integration, FAQ context, suggested reply in the Telegram card.
 
 (Phase 1's TypeScript/Express scaffold was dropped — native `http` + plain JS was enough.)

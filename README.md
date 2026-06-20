@@ -10,25 +10,36 @@ yet implemented** — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | Piece | State |
 |-------|-------|
 | IG auth (Instagram Login, `graph.instagram.com`) | ✅ working |
-| Inbound DM via `messages` webhook | ✅ working (real users, no App Review — own account) |
-| Forward DM → Telegram group | ✅ |
-| Reply from Telegram → IG (`/me/messages`) | ✅ (needs live test) |
-| Persistence (SQLite, timestamps, follow-ups) | ✅ |
+| Inbound DM (text + media) via `messages` webhook | ✅ working (real users, no App Review — own account) |
+| Per-user Telegram forum topics | ✅ |
+| Reply from Telegram → IG (`/me/messages`) | ✅ |
+| Reaction passthrough (Telegram → IG) | ✅ |
+| Moderation/ops commands (block, prune, health, …) | ✅ |
+| Persistence (SQLite on a Fly volume) | ✅ |
+| Deploy (Fly.io, ~64 MB image) | ✅ |
 | AI-suggested replies (Claude) | ⏳ deferred |
-| Deploy (Fly.io) | ⏳ next |
 
 ## How it works
 
 ```
-IG user DMs the account
+IG user DMs the account (text or media)
   → Meta webhook → POST /webhook   (signature-verified)
-  → stored in data.db, forwarded to the Telegram group as "📩 IG <igsid>\n<text>"
-  → member *replies to that message* in Telegram
+  → stored in SQLite, forwarded into that user's Telegram forum topic
+  → member types a reply inside the topic
   → reply sent to the IG user via graph.instagram.com/me/messages (24h window)
 ```
 
-Reply routing: each forwarded message's Telegram `message_id` is mapped to the sender's
-IGSID in SQLite, so a Telegram reply goes back to the right Instagram user.
+- **One topic per IG user**, named `Name (@username)`, created on first DM (auto-recreated if deleted).
+- Routing is by the topic's `message_thread_id` → IGSID (persisted in SQLite), so replies reach the right user.
+- **Media** (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/links fall back to a link.
+- A **✉️** marks topics whose last message is from the user; it clears when you reply.
+- An **emoji reaction** on a forwarded message is mirrored onto the IG message.
+
+## Commands
+
+`/help` `/general` (reply to a message → copy it to #General with a back-link) `/read` `/unread`
+(toggle the ✉️) `/block` `/unblock` (soft-ignore a user, not blocked on IG) `/health` (bot + IG
+token status) `/prune` (delete topics inactive > 1 year) `/id` (chat id).
 
 ## Setup — step by step
 
@@ -57,12 +68,11 @@ VERIFY_TOKEN=        # any random string; must match the Meta webhook config bel
 ### 3. Create the bot (BotFather)
 
 - DM **@BotFather** → `/newbot` → name it → copy the token.
-- Privacy mode: **no action needed** — members reply to the bot's own forwarded message, and
-  bots always receive replies to their own messages even with privacy ON.
 
-### 4. Create the group + get its id
+### 4. Create the supergroup + get its id
 
-- Create a private group, add your bot.
+- Create a private group, **enable Topics** (converts it to a supergroup), and add the bot
+  as **admin with "Manage Topics"** (needed to create/rename/delete per-user topics).
 - Start the server (step 6), then type **`/id`** in the group → bot replies `chat id: -100…`.
 
 ### 5. Add the Telegram values to `.env`
@@ -88,12 +98,12 @@ re-paste it into the dashboard when it does.
 ### 7. Test the round-trip
 
 ```bash
-yarn selftest    # offline: signature validation + reply-routing logic
+yarn selftest    # offline: signature, topic/reply routing, blocklist, unread, prune, reactions
 ```
 
 End-to-end:
-- Real DM to the IG account → appears in the group as `📩 IG <igsid>\n<text>`.
-- **Reply** to that message in Telegram → the IG user receives your text.
+- Real DM to the IG account → a topic `Name (@username)` appears, marked ✉️, with the message inside.
+- **Type a reply inside that topic** → the IG user receives it, and the ✉️ clears.
 - Outside 24h of their last message → bot posts `❌ IG send failed` (expected Meta limit).
 
 ## Files
