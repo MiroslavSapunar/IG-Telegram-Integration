@@ -15,8 +15,8 @@ Current (implemented, no AI yet):
 1. DM arrives on Instagram
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
-4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`), and marks the topic ✉️ pending
-5. A union member types a reply **inside that topic** (the ✉️ clears); an emoji reaction on a forwarded message is mirrored onto the IG message
+4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`, branded with a topic icon), **reopening** it if it was closed (open = needs attention)
+5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/read` closes it once resolved); an emoji reaction on a forwarded message is mirrored onto the IG message
 6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
 Planned (Phase 4): before step 4, Claude reads the message + FAQ context and the forwarded
@@ -73,7 +73,7 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM, auto-recreated if deleted)
 - Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
 - Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
-- ✉️ unread marker on topics whose last message is from the user; cleared on reply
+- Attention via topic **open/closed** (not a name marker): open = needs the team, closed = resolved (`/read`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/read`). Topics are branded with an icon baked in at creation; command acks + `/read`/`/unread` self-delete so the preview stays the real conversation
 - Emoji reaction on a forwarded message → mirrored onto the IG message (remove → unreact)
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"

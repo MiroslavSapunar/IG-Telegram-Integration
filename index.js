@@ -116,13 +116,28 @@ const reactIG = (igsid, mid, emoji) => igMessages(emoji
   : { recipient: { id: igsid }, sender_action: 'unreact', payload: { message_id: mid } });
 
 if (SELFTEST) selftest();
-else main();
+else main().catch((e) => { console.error(e); process.exit(1); });
 
-function main() {
+async function main() {
   for (const [k, v] of Object.entries({ META_APP_SECRET, IG_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, VERIFY_TOKEN }))
     if (!v) console.warn(`⚠️  ${k} not set`);
 
   const bot = new Bot(TELEGRAM_BOT_TOKEN);
+
+  // brand every IG DM topic with a consistent icon, set once at creation (best-effort; topics still create without it).
+  // icon ids must come from getForumTopicIconStickers — random custom emoji are rejected.
+  let TOPIC_ICON;
+  try {
+    const icons = await bot.api.getForumTopicIconStickers();
+    TOPIC_ICON = (icons.find((s) => ['📨', '✉', '💬'].includes(s.emoji)) || icons[0])?.custom_emoji_id;
+  } catch (e) { console.error('icon stickers:', e.message); }
+
+  // ack a command then self-destruct + drop the command message: neither should linger as the topic's preview line
+  const ack = async (ctx, text) => {
+    await ctx.deleteMessage().catch(() => {});
+    const m = await ctx.reply(text);
+    setTimeout(() => ctx.api.deleteMessage(ctx.chat.id, m.message_id).catch(() => {}), 6000);
+  };
 
   // helper to find the group's chat id: type /id in the group
   bot.command('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
@@ -131,8 +146,8 @@ function main() {
     'Comandos:\n' +
     '/help — esta lista\n' +
     '/general — (respondiendo a un mensaje) lo copia al tema General\n' +
-    '/read — (dentro del tema) saca el ✉️ de pendiente\n' +
-    '/unread — (dentro del tema) marca con ✉️ como pendiente\n' +
+    '/read — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
+    '/unread — (dentro del tema) lo reabre como pendiente\n' +
     '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
     '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
     '/health — estado del bot y del token de Instagram\n' +
@@ -153,7 +168,7 @@ function main() {
       await ctx.api.copyMessage(ctx.chat.id, ctx.chat.id, replied.message_id, { // no thread_id -> General
         reply_markup: { inline_keyboard: [[{ text: `↗ Ir a ${name}`, url: link }]] },
       });
-      await ctx.reply('✅ Copiado a General.');
+      await ack(ctx, '✅ Copiado a General.');
     } catch (e) {
       await ctx.reply(`❌ No se pudo copiar: ${e.description || e.message}`);
     }
@@ -169,23 +184,25 @@ function main() {
     const igsid = igsidOfTopic(ctx);
     if (!igsid) return ctx.reply('Usá /block dentro del tema del usuario.');
     q.block.run(igsid, Date.now());
-    await ctx.reply('🚫 Usuario bloqueado: no se reenviarán más mensajes suyos (no se bloquea en Instagram).');
+    await ack(ctx, '🚫 Usuario bloqueado: no se reenviarán más mensajes suyos (no se bloquea en Instagram).');
   });
   bot.command('unblock', async (ctx) => {
     const igsid = igsidOfTopic(ctx);
     if (!igsid) return ctx.reply('Usá /unblock dentro del tema del usuario.');
     q.unblock.run(igsid);
-    await ctx.reply('✅ Usuario desbloqueado.');
+    await ack(ctx, '✅ Usuario desbloqueado.');
   });
   bot.command('read', async (ctx) => {
     const igsid = igsidOfTopic(ctx);
-    if (!igsid) return ctx.reply('Usá /read dentro del tema para sacar el ✉️.');
-    await setTopicMark(igsid, false);
+    if (!igsid) return ctx.reply('Usá /read dentro del tema para marcarlo resuelto.');
+    await setTopicOpen(igsid, false);                          // resuelto -> cerrar (sale de la lista activa)
+    await ctx.deleteMessage().catch(() => {});
   });
   bot.command('unread', async (ctx) => {
     const igsid = igsidOfTopic(ctx);
-    if (!igsid) return ctx.reply('Usá /unread dentro del tema para marcar con ✉️.');
-    await setTopicMark(igsid, true);
+    if (!igsid) return ctx.reply('Usá /unread dentro del tema para reabrirlo como pendiente.');
+    await setTopicOpen(igsid, true);
+    await ctx.deleteMessage().catch(() => {});
   });
   bot.command('health', async (ctx) => {
     let ig;
@@ -222,7 +239,8 @@ function main() {
     try {
       await sendIG(row.igsid, ctx.message.text);
       q.insertOut.run(row.igsid, ctx.message.text, Date.now());
-      await setTopicMark(row.igsid, false);                    // we replied -> clear ✉️
+      // leave the topic OPEN: a member may send follow-ups, and they're regulars who can't post once it's closed.
+      // Closing is a deliberate /read.
     } catch (e) {
       await ctx.reply(`❌ IG send failed: ${e.message}`);       // e.g. outside 24h window
     }
@@ -240,27 +258,27 @@ function main() {
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });
 
-  // ✉️ marks a topic whose last message is from the user; cleared after we reply.
-  // Tracked in db so we only call the Telegram API on an actual state change.
-  async function setTopicMark(igsid, unread) {
+  // open/closed IS the attention signal: a topic stays OPEN while it needs the team (new DM or live
+  // conversation) and is CLOSED once someone marks it resolved with /read; closed topics drop out of the
+  // active list. A new inbound DM reopens it. `unread` in db = "is open", tracked so we only hit the
+  // Telegram API on an actual state change (and avoid TOPIC_NOT_MODIFIED noise).
+  async function setTopicOpen(igsid, open) {
     const row = q.threadFull.get(igsid);
-    if (!row || row.unread === (unread ? 1 : 0)) return;
-    const base = (row.name || '').replace(/^✉️ /, '');
-    const name = (unread ? `✉️ ${base}` : base).slice(0, 128);
+    if (!row || row.unread === (open ? 1 : 0)) return;
     try {
-      await bot.api.editForumTopic(TELEGRAM_CHAT_ID, row.thread_id, { name });
-      q.setUnread.run(unread ? 1 : 0, igsid);
-    } catch (e) { console.error('mark topic:', e.description || e.message); }
+      if (open) await bot.api.reopenForumTopic(TELEGRAM_CHAT_ID, row.thread_id);
+      else await bot.api.closeForumTopic(TELEGRAM_CHAT_ID, row.thread_id);
+      q.setUnread.run(open ? 1 : 0, igsid);
+    } catch (e) { console.error('open topic:', e.description || e.message); }
   }
 
-  // create a fresh forum topic for this user and (re)store the mapping.
-  // topics are only created from an inbound DM, so start already marked unread (✉️ in the name)
-  // to avoid a create-then-rename and its noisy "renamed the topic" service message.
+  // create a fresh forum topic for this user and (re)store the mapping. Created only from an inbound DM,
+  // so it starts open. Icon is baked in at creation (no edit -> no "changed the topic" service message).
   async function createTopic(igsid) {
     const name = (await displayName(igsid)).slice(0, 128);
-    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, `✉️ ${name}`.slice(0, 128));
+    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, name, TOPIC_ICON ? { icon_custom_emoji_id: TOPIC_ICON } : {});
     q.insertThread.run(igsid, topic.message_thread_id, name, Date.now());
-    q.setUnread.run(1, igsid);                                   // store base name, flag unread
+    q.setUnread.run(1, igsid);                                   // fresh topic is open / needs attention
     console.log(`created topic ${topic.message_thread_id} for ${name}`);
     return topic.message_thread_id;
   }
@@ -321,7 +339,7 @@ function main() {
       if (text !== undefined) forwarded.push(await forwardToTopic(igsid, text));
       for (const att of attachments) { const s = await forwardAttachment(igsid, att); if (s) forwarded.push(s); }
       for (const s of forwarded) if (mid) q.insertFwd.run(s.message_id, igsid, mid); // reaction passthrough
-      await setTopicMark(igsid, true);                              // user wrote last -> ✉️
+      await setTopicOpen(igsid, true);                              // user wrote -> reopen / keep open
       console.log(`DM from ${igsid}: ${summary}`);
     }
   }
