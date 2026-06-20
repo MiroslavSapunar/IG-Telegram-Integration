@@ -11,6 +11,6 @@ FROM node:20-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
-COPY package.json index.js ./
+COPY package.json *.js ./
 EXPOSE 3000
 CMD ["node", "index.js"]
