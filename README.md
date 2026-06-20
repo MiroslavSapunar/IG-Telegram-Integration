@@ -42,7 +42,7 @@ IG user DMs the account (text or media)
 Commands are in Spanish. `/ayuda` (this list) `/manual` (quick guide for members) `/general`
 (reply to a message → copy it to #General with a back-link) `/resuelto` `/pendiente` (close as
 resolved / reopen as pending) `/bloquear` `/desbloquear` (soft-ignore a user, not blocked on IG)
-`/bloqueados` (list blocked users) `/champions` (per-member message count, excludes General)
+`/bloqueados` (list blocked users) `/respuestas` (top-10 replies per member, excludes General)
 `/estado` (open topics + 24h-window time left, ⚠️ under 6h) `/servercheck` (bot + IG token status)
 `/purgar` (delete topics inactive > 1 year) `/id` (chat id).
 

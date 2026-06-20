@@ -62,7 +62,7 @@ export const q = {
   fwdByMid:      db.prepare(`SELECT tg_message_id FROM fwd WHERE ig_mid=?`),
   bumpMember:    db.prepare(`INSERT INTO members(user_id,name,count,updated_at) VALUES(?,?,1,?)
     ON CONFLICT(user_id) DO UPDATE SET count=count+1, name=excluded.name, updated_at=excluded.updated_at`),
-  leaderboard:   db.prepare(`SELECT user_id, name, count FROM members ORDER BY count DESC, name LIMIT 20`),
+  leaderboard:   db.prepare(`SELECT user_id, name, count FROM members ORDER BY count DESC, name LIMIT 10`),
 };
 
 // soft blocklist: env seed + runtime /block. Dropped before forwarding (NOT blocked on Instagram).

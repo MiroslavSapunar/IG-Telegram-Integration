@@ -69,7 +69,7 @@ bot.command('ayuda', (ctx) => ctx.reply(
   '/bloquear — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
   '/desbloquear — (dentro del tema) vuelve a reenviar sus mensajes\n' +
   '/bloqueados — lista los usuarios bloqueados\n' +
-  '/champions — ranking de mensajes por miembro (sin General)\n' +
+  '/respuestas — mensajes respondidos por cada miembro (sin General)\n' +
   '/estado — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
   '/servercheck — estado del bot y del token de Instagram\n' +
   '/purgar — borra chats sin actividad hace más de 1 año\n' +
@@ -129,12 +129,11 @@ bot.command('bloqueados', (ctx) => {
   const lines = rows.map((r) => `• ${r.name || r.igsid}`).concat(env.map((id) => `• ${id} (env)`));
   ctx.reply(`🚫 Bloqueados (${lines.length}) — /desbloquear dentro del tema para desbloquear:\n${lines.join('\n')}`);
 });
-bot.command('champions', (ctx) => {
-  const rows = q.leaderboard.all();
+bot.command('respuestas', (ctx) => {
+  const rows = q.leaderboard.all();   // top 10
   if (!rows.length) return ctx.reply('Todavía no hay mensajes registrados.');
-  const medal = (i) => ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-  const lines = rows.map((r, i) => `${medal(i)} ${r.name || r.user_id} — ${r.count}`);
-  ctx.reply(`🏆 Mensajes por miembro (sin General):\n${lines.join('\n')}`);
+  const lines = rows.map((r) => `• ${r.name || r.user_id} — ${r.count}`);
+  ctx.reply(`📊 Respuestas por miembro (sin General):\n${lines.join('\n')}`);
 });
 bot.command('resuelto', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
@@ -175,7 +174,7 @@ bot.command('purgar', async (ctx) => {
   await ctx.reply(`🧹 Purga: ${deleted} tema(s) sin actividad hace +1 año eliminados${errors ? `, ${errors} con error` : ''}.`);
 });
 
-// tally each member's messages in user topics (everything but General + commands) for /champions.
+// tally each member's messages in user topics (everything but General + commands) for /respuestas.
 // runs first and calls next() so the relay handler below still fires.
 bot.on('message', async (ctx, next) => {
   const u = ctx.from;
@@ -300,7 +299,7 @@ const COMMANDS = [
   ['bloquear', 'Dejar de reenviar los mensajes del usuario'],
   ['desbloquear', 'Volver a reenviar sus mensajes'],
   ['bloqueados', 'Lista de usuarios bloqueados'],
-  ['champions', 'Ranking de mensajes por miembro'],
+  ['respuestas', 'Mensajes respondidos por cada miembro'],
   ['estado', 'Temas abiertos y tiempo restante (24h)'],
   ['servercheck', 'Estado del bot y del token de Instagram'],
   ['purgar', 'Borrar temas inactivos hace +1 año'],

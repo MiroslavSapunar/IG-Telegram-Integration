@@ -117,7 +117,7 @@ function selftest() {
   assert(q.blockedList.all().some((r) => r.igsid === 'IGbad' && r.name === 'Bad Guy (@bad)'), 'blocklist shows blocked user with name');
   q.unblock.run('IGbad'); assert(!isBlocked('IGbad'), 'unblock clears user');
   assert(!q.blockedList.all().some((r) => r.igsid === 'IGbad'), 'unblocked user drops off blocklist');
-  // /champions: bumpMember upserts a per-user count, ranked desc
+  // /respuestas: bumpMember upserts a per-user count, ranked desc
   q.bumpMember.run(101, 'Ana', 1); q.bumpMember.run(101, 'Ana', 2); q.bumpMember.run(102, 'Beto', 3);
   const lb = q.leaderboard.all();
   assert(lb[0].user_id === 101 && lb[0].count === 2, 'leaderboard ranks most-active member first');
