@@ -53,12 +53,17 @@ const q = {
       COALESCE((SELECT MAX(created_at) FROM messages m WHERE m.igsid=t.igsid), t.created_at) AS last_at
     FROM threads t
   ) WHERE last_at < ?`),
+  openTopics:    db.prepare(`SELECT t.igsid, t.thread_id, t.name,
+    (SELECT MAX(created_at) FROM messages m WHERE m.igsid=t.igsid AND m.direction='in') AS last_in
+    FROM threads t WHERE t.unread=1
+    ORDER BY last_in IS NULL, last_in ASC`),   // most-urgent (oldest inbound) first; no-inbound last
   isBlocked:     db.prepare(`SELECT 1 FROM blocked WHERE igsid=?`),
   block:         db.prepare(`INSERT OR IGNORE INTO blocked(igsid,created_at) VALUES(?,?)`),
   unblock:       db.prepare(`DELETE FROM blocked WHERE igsid=?`),
   lastInbound:   db.prepare(`SELECT MAX(created_at) AS t FROM messages WHERE direction='in'`),
   insertFwd:     db.prepare(`INSERT OR REPLACE INTO fwd(tg_message_id,igsid,ig_mid) VALUES(?,?,?)`),
   fwdByTg:       db.prepare(`SELECT igsid, ig_mid FROM fwd WHERE tg_message_id=?`),
+  fwdByMid:      db.prepare(`SELECT tg_message_id FROM fwd WHERE ig_mid=?`),
 };
 
 // soft blocklist: env seed + runtime /block. Dropped before forwarding (NOT blocked on Instagram).
@@ -115,6 +120,29 @@ const reactIG = (igsid, mid, emoji) => igMessages(emoji
   ? { recipient: { id: igsid }, sender_action: 'react', payload: { message_id: mid, reaction: emoji } }
   : { recipient: { id: igsid }, sender_action: 'unreact', payload: { message_id: mid } });
 
+// open topics + how long is left on each one's IG 24h reply window (from the user's last inbound DM)
+const WINDOW_MS = 24 * 60 * 60 * 1000, WARN_MS = 6 * 60 * 60 * 1000;
+const fmtLeft = (ms) => {
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h ? `${h}h ${m}m` : `${m}m`;
+};
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function statusText(now = Date.now()) {
+  const rows = q.openTopics.all();
+  if (!rows.length) return '✅ No hay temas abiertos.';
+  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');     // t.me/c link uses id without -100
+  let warn = 0;
+  const lines = rows.map((r) => {
+    const left = r.last_in == null ? null : (r.last_in + WINDOW_MS) - now;
+    const emoji = left == null ? '•' : left <= 0 ? '⛔' : left < WARN_MS ? '⚠️' : '🟢';
+    if (left != null && left < WARN_MS) warn++;
+    const when = left == null ? 'sin DM entrante' : left <= 0 ? 'ventana vencida' : `${fmtLeft(left)} restantes`;
+    return `${emoji} <a href="https://t.me/c/${chatC}/${r.thread_id}">${esc(r.name || r.igsid)}</a> — ${when}`;
+  });
+  const head = `📋 Temas abiertos: ${rows.length}${warn ? ` · ⚠️ ${warn} por vencer` : ''}`;
+  return [head, ...lines].join('\n');
+}
+
 if (SELFTEST) selftest();
 else main().catch((e) => { console.error(e); process.exit(1); });
 
@@ -150,6 +178,7 @@ async function main() {
     '/unread — (dentro del tema) lo reabre como pendiente\n' +
     '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
     '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
+    '/status — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
     '/health — estado del bot y del token de Instagram\n' +
     '/prune — borra chats sin actividad hace más de 1 año\n' +
     '/id — muestra el id de este chat\n\n' +
@@ -204,6 +233,8 @@ async function main() {
     await setTopicOpen(igsid, true);
     await ctx.deleteMessage().catch(() => {});
   });
+  const STATUS_OPTS = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
+  bot.command('status', (ctx) => ctx.reply(statusText(), STATUS_OPTS));
   bot.command('health', async (ctx) => {
     let ig;
     try {
@@ -237,8 +268,9 @@ async function main() {
     const row = q.igsidByThread.get(threadId);
     if (!row) return;                                           // not a mapped topic
     try {
-      await sendIG(row.igsid, ctx.message.text);
+      const r = await sendIG(row.igsid, ctx.message.text);
       q.insertOut.run(row.igsid, ctx.message.text, Date.now());
+      if (r?.message_id) q.insertFwd.run(ctx.message.message_id, row.igsid, r.message_id); // so A's IG reaction on this reply mirrors back
       // leave the topic OPEN: a member may send follow-ups, and they're regulars who can't post once it's closed.
       // Closing is a deliberate /read.
     } catch (e) {
@@ -255,8 +287,29 @@ async function main() {
     } catch (e) { console.error('reactIG:', e.message); }
   });
 
+  // the other direction: an IG user reacts to a message (theirs, or a member's reply) -> mirror onto the
+  // Telegram message. Telegram only accepts a fixed reaction set, so map IG's six types to allowed emoji.
+  const IG_REACT = { love: '❤️', like: '👍', haha: '😁', wow: '😱', sad: '😢', angry: '🤬' };
+  async function mirrorReaction(m) {
+    const map = q.fwdByMid.get(m.reaction?.mid);
+    if (!map) return;                                         // reacted to a message we never forwarded/sent
+    const emoji = IG_REACT[m.reaction.reaction] || m.reaction.emoji;
+    const reaction = m.reaction.action === 'react' && emoji ? [{ type: 'emoji', emoji }] : []; // unreact -> clear
+    try {
+      await bot.api.setMessageReaction(TELEGRAM_CHAT_ID, map.tg_message_id, reaction);
+    } catch (e) { console.error('mirror reaction:', e.description || e.message); }
+  }
+
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });
+
+  // every 2h, post the open-topics status into General so the whole team sees what's pending / about to expire.
+  // stays quiet when nothing is open. General topic = sendMessage with no message_thread_id.
+  setInterval(async () => {
+    if (!q.openTopics.all().length) return;
+    try { await bot.api.sendMessage(TELEGRAM_CHAT_ID, statusText(), STATUS_OPTS); }
+    catch (e) { console.error('status cron:', e.description || e.message); }
+  }, 2 * 60 * 60 * 1000);
 
   // open/closed IS the attention signal: a topic stays OPEN while it needs the team (new DM or live
   // conversation) and is CLOSED once someone marks it resolved with /read; closed topics drop out of the
@@ -327,7 +380,8 @@ async function main() {
     for (const m of items) {
       const igsid = m.sender?.id;
       if (igsid === IG_ACCOUNT_ID || m.message?.is_echo) continue;   // our own outgoing message echoed back
-      if (m.read || m.delivery || m.reaction) continue;             // read/delivery receipts, reactions
+      if (m.reaction) { await mirrorReaction(m); continue; }         // IG reaction -> mirror onto the Telegram message
+      if (m.read || m.delivery) continue;                           // read/delivery receipts
       if (isBlocked(igsid)) { console.log(`blocked ${igsid} — dropped`); continue; }
       const text = m.message?.text;
       const attachments = m.message?.attachments ?? [];
@@ -391,12 +445,25 @@ function selftest() {
   q.insertThread.run('IGm', 321, 'Name', Date.now());
   q.setUnread.run(1, 'IGm'); assert(q.threadFull.get('IGm').unread === 1, 'mark unread sets flag');
   q.setUnread.run(0, 'IGm'); assert(q.threadFull.get('IGm').unread === 0, 'read clears flag');
+  // /status: only open (unread=1) topics are listed, and <6h-left ones get the ⚠️ warning
+  const now = Date.now();
+  q.insertThread.run('IGopenUrgent', 11, 'Urgent (@u)', now); q.setUnread.run(1, 'IGopenUrgent');
+  q.insertIn.run('IGopenUrgent', 'hola', now - 19 * 3600000);          // 5h left -> warn
+  q.insertThread.run('IGopenCalm', 12, 'Calm (@c)', now); q.setUnread.run(1, 'IGopenCalm');
+  q.insertIn.run('IGopenCalm', 'hola', now - 1 * 3600000);             // 23h left -> no warn
+  q.insertThread.run('IGclosed', 13, 'Closed (@x)', now); q.setUnread.run(0, 'IGclosed');
+  const st = statusText(now);
+  assert(/Urgent/.test(st) && /Calm/.test(st), 'status lists open topics');
+  assert(!/Closed/.test(st), 'status hides closed topics');
+  assert(/⚠️ <a[^>]*>Urgent/.test(st), 'topic with <6h left gets the ⚠️ warning');
+  assert(/🟢 <a[^>]*>Calm/.test(st), 'topic with plenty of time is not warned');
   // blocklist round-trip
   q.block.run('IGbad', 1); assert(isBlocked('IGbad'), 'block marks user');
   q.unblock.run('IGbad'); assert(!isBlocked('IGbad'), 'unblock clears user');
   // reaction passthrough: fwd mapping + emoji selection
   q.insertFwd.run(42, 'IGz', 'mid_1');
   assert(q.fwdByTg.get(42)?.ig_mid === 'mid_1', 'fwd maps tg message -> ig mid');
+  assert(q.fwdByMid.get('mid_1')?.tg_message_id === 42, 'fwd maps ig mid -> tg message (IG reaction mirror)');
   assert(pickEmoji([{ type: 'emoji', emoji: '👍' }]) === '👍', 'pick plain emoji');
   assert(pickEmoji([{ type: 'custom_emoji', custom_emoji_id: 'x' }]) === undefined, 'skip custom emoji');
   assert(pickEmoji([]) === undefined, 'no reaction -> unreact');

@@ -13,7 +13,8 @@ yet implemented** — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | Inbound DM (text + media) via `messages` webhook | ✅ working (real users, no App Review — own account) |
 | Per-user Telegram forum topics | ✅ |
 | Reply from Telegram → IG (`/me/messages`) | ✅ |
-| Reaction passthrough (Telegram → IG) | ✅ |
+| Reaction sync (Telegram ↔ IG, both ways) | ✅ |
+| Open-topic `/status` + 2h alert into General | ✅ |
 | Moderation/ops commands (block, prune, health, …) | ✅ |
 | Persistence (SQLite on a Fly volume) | ✅ |
 | Deploy (Fly.io, ~64 MB image) | ✅ |
@@ -33,13 +34,15 @@ IG user DMs the account (text or media)
 - Routing is by the topic's `message_thread_id` → IGSID (persisted in SQLite), so replies reach the right user.
 - **Media** (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/links fall back to a link.
 - **Attention = open/closed topic**: a topic stays open while it needs the team and closes when you mark it resolved with `/read`; a new DM reopens it, so handled chats leave the active list. Replies keep it open (for follow-ups); command acks self-delete so the preview stays the real conversation.
-- An **emoji reaction** on a forwarded message is mirrored onto the IG message.
+- **Reactions sync both ways**: a member's emoji reaction in Telegram is mirrored onto the IG message, and an IG user's reaction (on their message or your reply) is mirrored back onto the Telegram message (mapped to Telegram's allowed set).
+- **`/status`** lists open topics with the time left on each one's IG 24h reply window (`⚠️` under 6h, `⛔` expired); a 2h job auto-posts it into General when anything is open.
 
 ## Commands
 
 `/help` `/general` (reply to a message → copy it to #General with a back-link) `/read` `/unread`
 (close as resolved / reopen as pending) `/block` `/unblock` (soft-ignore a user, not blocked on IG)
-`/health` (bot + IG token status) `/prune` (delete topics inactive > 1 year) `/id` (chat id).
+`/status` (open topics + 24h-window time left, ⚠️ under 6h) `/health` (bot + IG token status)
+`/prune` (delete topics inactive > 1 year) `/id` (chat id).
 
 ## Setup — step by step
 
@@ -92,8 +95,9 @@ cloudflared tunnel --url http://localhost:3000   # new terminal — public HTTPS
 ```
 
 Point the Meta app's webhook callback to `https://<tunnel>/webhook` with your `VERIFY_TOKEN`
-and subscribe to the **`messages`** field. The quick-tunnel URL changes on every restart —
-re-paste it into the dashboard when it does.
+and subscribe to the **`messages`** field **and the message-reactions field** (the latter is
+required for IG-user reactions to mirror into Telegram). The quick-tunnel URL changes on every
+restart — re-paste it into the dashboard when it does.
 
 ### 7. Test the round-trip
 

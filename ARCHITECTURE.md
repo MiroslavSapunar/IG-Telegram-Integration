@@ -16,7 +16,7 @@ Current (implemented, no AI yet):
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
 4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `Name (@username)`, branded with a topic icon), **reopening** it if it was closed (open = needs attention)
-5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/read` closes it once resolved); an emoji reaction on a forwarded message is mirrored onto the IG message
+5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/read` closes it once resolved); emoji reactions sync both ways between the forwarded/replied message and its IG counterpart
 6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
 Planned (Phase 4): before step 4, Claude reads the message + FAQ context and the forwarded
@@ -44,7 +44,7 @@ for the bot, `better-sqlite3` for storage. No web framework, no ORM.
 - **Access token**: Instagram User token (`IGAA...`), generated via App Dashboard → Instagram → API setup with Instagram business login → **Generate token**. Dashboard tokens last 60 days. (Graph API Explorer is the wrong tool — it issues FB/app tokens.)
 - **Rate limit**: 200 DMs/hour
 - **Messaging window**: 24h to reply (extendable with `human_agent` permission)
-- **Webhook**: Must respond HTTP 200 within 30 seconds; payloads are signed `x-hub-signature-256: sha256=<hmac>` with the app secret
+- **Webhook**: Must respond HTTP 200 within 30 seconds; payloads are signed `x-hub-signature-256: sha256=<hmac>` with the app secret. Subscribe to **`messages`** *and* the **message-reactions** field — reactions arrive as a separate webhook field, so without it IG-user reactions never reach the bot
 - **Publishing**: the app must be **Live/published** to receive real webhooks — this only needs basic settings + a privacy-policy URL
 - **App Review**: NOT required for the union's own account (direct-developer / Standard Access path). Advanced Access via App Review is only needed to serve accounts you don't own.
 
@@ -74,16 +74,17 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
 - Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
 - Attention via topic **open/closed** (not a name marker): open = needs the team, closed = resolved (`/read`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/read`). Topics are branded with an icon baked in at creation; command acks + `/read`/`/unread` self-delete so the preview stays the real conversation
-- Emoji reaction on a forwarded message → mirrored onto the IG message (remove → unreact)
+- Reactions sync **both ways**: a member's reaction in Telegram → IG message (remove → unreact); an IG user's reaction (on their message or a member's reply) → the Telegram message, mapped to Telegram's fixed reaction set. Both directions need the `fwd` table to map IG message id ↔ Telegram message id (now stored for inbound *and* outbound)
+- `/status`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"
-- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/block` `/unblock` `/health` `/prune` `/id`
+- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/health` `/prune` `/id`
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
 - `threads`: `igsid` ↔ `thread_id` (forum topic) + `unread` flag — persistent routing + marker state
 - `blocked`: soft-blocked IGSIDs (also seedable via `BLOCKED_IGSIDS` env)
-- `fwd`: forwarded Telegram message → IG message id (`mid`), for reaction passthrough
+- `fwd`: Telegram message ↔ IG message id (`mid`) — inbound forwards *and* outbound replies — for two-way reaction sync
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit
