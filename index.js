@@ -133,7 +133,7 @@ const reactIG = (igsid, mid, emoji) => igMessages(emoji
 
 // open topics + how long is left on each one's IG 24h reply window (from the user's last inbound DM)
 const WINDOW_MS = 24 * 60 * 60 * 1000, WARN_MS = 6 * 60 * 60 * 1000;
-const OPEN_BADGE = '✉️';   // name prefix on open/pending topics; removed when /read closes them
+const OPEN_BADGE = '❗';   // name prefix on open/pending topics; removed when /read closes them
 const fmtLeft = (ms) => {
   const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
   return h ? `${h}h ${m}m` : `${m}m`;
@@ -146,7 +146,7 @@ function statusText(now = Date.now()) {
   let warn = 0;
   const lines = rows.map((r) => {
     const left = r.last_in == null ? null : (r.last_in + WINDOW_MS) - now;
-    const emoji = left == null ? '•' : left <= 0 ? '⛔' : left < WARN_MS ? '⚠️' : '🟢';
+    const emoji = left == null ? '•' : left <= 0 ? '⛔' : left < WARN_MS ? '⚠️' : '‼️';
     if (left != null && left < WARN_MS) warn++;
     const when = left == null ? 'sin DM entrante' : left <= 0 ? 'ventana vencida' : `${fmtLeft(left)} restantes`;
     return `${emoji} <a href="https://t.me/c/${chatC}/${r.thread_id}">${esc(r.name || r.igsid)}</a> — ${when}`;
@@ -187,7 +187,7 @@ async function main() {
     '/help — esta lista\n' +
     '/general — (respondiendo a un mensaje) lo copia al tema General\n' +
     '/read — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
-    '/unread — (dentro del tema) lo reabre como pendiente. Agrega ✉️ al inicio del nombre\n' +
+    '/unread — (dentro del tema) lo reabre como pendiente. Agrega ❗ al inicio del nombre\n' +
     '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
     '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
     '/blocklist — lista los usuarios bloqueados\n' +
@@ -502,7 +502,7 @@ function selftest() {
   assert(/Urgent/.test(st) && /Calm/.test(st), 'status lists open topics');
   assert(!/Closed/.test(st), 'status hides closed topics');
   assert(/⚠️ <a[^>]*>Urgent/.test(st), 'topic with <6h left gets the ⚠️ warning');
-  assert(/🟢 <a[^>]*>Calm/.test(st), 'topic with plenty of time is not warned');
+  assert(/‼️ <a[^>]*>Calm/.test(st), 'topic with plenty of time uses ‼️ (not the <6h ⚠️)');
   // blocklist round-trip
   q.block.run('IGbad', 1); assert(isBlocked('IGbad'), 'block marks user');
   q.insertThread.run('IGbad', 71, 'Bad Guy (@bad)', Date.now());
