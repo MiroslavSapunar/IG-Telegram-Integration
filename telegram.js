@@ -69,7 +69,7 @@ bot.command('ayuda', (ctx) => ctx.reply(
   '/bloquear — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
   '/desbloquear — (dentro del tema) vuelve a reenviar sus mensajes\n' +
   '/bloqueados — lista los usuarios bloqueados\n' +
-  '/respuestas — mensajes respondidos por cada miembro (sin General)\n' +
+  '/respuestas — mensajes enviados por cada miembro (sin General)\n' +
   '/estado — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
   '/servercheck — estado del bot y del token de Instagram\n' +
   '/purgar — borra chats sin actividad hace más de 1 año\n' +
@@ -299,7 +299,7 @@ const COMMANDS = [
   ['bloquear', 'Dejar de reenviar los mensajes del usuario'],
   ['desbloquear', 'Volver a reenviar sus mensajes'],
   ['bloqueados', 'Lista de usuarios bloqueados'],
-  ['respuestas', 'Mensajes respondidos por cada miembro'],
+  ['respuestas', 'Mensajes enviados por cada miembro'],
   ['estado', 'Temas abiertos y tiempo restante (24h)'],
   ['servercheck', 'Estado del bot y del token de Instagram'],
   ['purgar', 'Borrar temas inactivos hace +1 año'],
