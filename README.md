@@ -30,7 +30,7 @@ IG user DMs the account (text or media)
   → reply sent to the IG user via graph.instagram.com/me/messages (24h window)
 ```
 
-- **One topic per IG user**, named `Name (@username)`, created on first DM (auto-recreated if deleted).
+- **One topic per IG user**, named `❗ Name (@username)` (the ❗ marks it open/pending), created on first DM (auto-recreated if deleted).
 - Routing is by the topic's `message_thread_id` → IGSID (persisted in SQLite), so replies reach the right user.
 - **Media** (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/links fall back to a link.
 - **Attention = open/closed topic + ❗ badge**: an open topic (❗ in its name) needs the team; `/read` closes it and drops the badge, a new DM reopens it, so handled chats leave the active list. Replies keep it open (for follow-ups); command acks self-delete so the preview stays the real conversation.
@@ -103,7 +103,7 @@ restart — re-paste it into the dashboard when it does.
 ### 7. Test the round-trip
 
 ```bash
-yarn selftest    # offline: signature, topic/reply routing, blocklist, unread, prune, reactions
+yarn selftest    # offline: signature, routing, status, blocklist, leaderboards, prune, reactions
 ```
 
 End-to-end:

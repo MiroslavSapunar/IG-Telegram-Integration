@@ -103,6 +103,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - ✅ **Phase 3 — Telegram Bot**: BotFather bot, supergroup with per-user topics, IG DM → Telegram forwarding, moderation/ops commands.
 - ✅ **Phase 5 — Reply Path**: member's Telegram reply → IG via `POST /me/messages`; reaction passthrough; messages persisted in SQLite.
 - ✅ **Phase 6 — Deployment**: multi-stage Dockerfile (~64 MB) + Fly.io (single machine, SQLite on a volume, secrets, stable webhook URL).
+- ✅ **Phase 7 — Triage UX & ops**: open/closed attention model with ❗ badge, two-way reaction sync, `/status` (24h-window timers) + 2h General alert, `/blocklist`, `/leaderboards`; `index.js` split into `config`/`db`/`instagram`/`telegram` modules.
 - ⏳ **Phase 4 — Claude AI**: Claude integration, FAQ context, suggested reply in the Telegram card.
 
 (Phase 1's TypeScript/Express scaffold was dropped — native `http` + plain JS was enough.)
