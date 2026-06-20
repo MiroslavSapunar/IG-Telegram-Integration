@@ -16,7 +16,7 @@ Current (implemented, no AI yet):
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
 4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `❗ Name (@username)`, branded with a topic icon), **reopening** it if it was closed (open / ❗ = needs attention)
-5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/read` closes it once resolved); emoji reactions sync both ways between the forwarded/replied message and its IG counterpart
+5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/resuelto` closes it once resolved); emoji reactions sync both ways between the forwarded/replied message and its IG counterpart
 6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
 Planned (Phase 4): before step 4, Claude reads the message + FAQ context and the forwarded
@@ -76,20 +76,20 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM, auto-recreated if deleted)
 - Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
 - Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
-- Attention via topic **open/closed** + a ❗ name badge: open (❗) = needs the team, closed = resolved (`/read`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/read`). The ❗ prefix and an icon are baked into the name at creation and the badge toggles only on open↔closed transitions (not per message); command acks + `/read`/`/unread` self-delete so the preview stays the real conversation
+- Attention via topic **open/closed** + a ❗ name badge: open (❗) = needs the team, closed = resolved (`/resuelto`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/resuelto`). The ❗ prefix and an icon are baked into the name at creation and the badge toggles only on open↔closed transitions (not per message); command acks + `/resuelto`/`/pendiente` self-delete so the preview stays the real conversation
 - Reactions sync **both ways**: a member's reaction in Telegram → IG message (remove → unreact); an IG user's reaction (on their message or a member's reply) → the Telegram message, mapped to Telegram's fixed reaction set. Both directions need the `fwd` table to map IG message id ↔ Telegram message id (now stored for inbound *and* outbound)
-- `/status`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
+- `/estado`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"
-- `/leaderboards`: per-member tally of messages sent in user topics (not General), ranked. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
-- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/blocklist` `/leaderboards` `/health` `/prune` `/id`
+- `/champions`: per-member tally of messages sent in user topics (not General), ranked. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
+- Commands (Spanish): `/ayuda` `/manual` (member guide) `/general` (copy to General with a back-link) `/resuelto` `/pendiente` `/estado` `/bloquear` `/desbloquear` `/bloqueados` `/champions` `/servercheck` `/purgar` `/id`
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
 - `threads`: `igsid` ↔ `thread_id` (forum topic) + `unread` flag — persistent routing + marker state
 - `blocked`: soft-blocked IGSIDs (also seedable via `BLOCKED_IGSIDS` env)
 - `fwd`: Telegram message ↔ IG message id (`mid`) — inbound forwards *and* outbound replies — for two-way reaction sync
-- `members`: Telegram `user_id` → message `count` in topics (not General), for `/leaderboards`
+- `members`: Telegram `user_id` → message `count` in topics (not General), for `/champions`
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit
@@ -103,7 +103,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - ✅ **Phase 3 — Telegram Bot**: BotFather bot, supergroup with per-user topics, IG DM → Telegram forwarding, moderation/ops commands.
 - ✅ **Phase 5 — Reply Path**: member's Telegram reply → IG via `POST /me/messages`; reaction passthrough; messages persisted in SQLite.
 - ✅ **Phase 6 — Deployment**: multi-stage Dockerfile (~64 MB) + Fly.io (single machine, SQLite on a volume, secrets, stable webhook URL).
-- ✅ **Phase 7 — Triage UX & ops**: open/closed attention model with ❗ badge, two-way reaction sync, `/status` (24h-window timers) + 2h General alert, `/blocklist`, `/leaderboards`; `index.js` split into `config`/`db`/`instagram`/`telegram` modules.
+- ✅ **Phase 7 — Triage UX & ops**: open/closed attention model with ❗ badge, two-way reaction sync, `/estado` (24h-window timers) + 2h General alert, `/bloqueados`, `/champions`, Spanish command names + `/manual` member guide; `index.js` split into `config`/`db`/`instagram`/`telegram` modules.
 - ⏳ **Phase 4 — Claude AI**: Claude integration, FAQ context, suggested reply in the Telegram card.
 
 (Phase 1's TypeScript/Express scaffold was dropped — native `http` + plain JS was enough.)

@@ -99,7 +99,7 @@ function selftest() {
   q.insertThread.run('IGm', 321, 'Name', Date.now());
   q.setUnread.run(1, 'IGm'); assert(q.threadFull.get('IGm').unread === 1, 'mark unread sets flag');
   q.setUnread.run(0, 'IGm'); assert(q.threadFull.get('IGm').unread === 0, 'read clears flag');
-  // /status: only open (unread=1) topics are listed, and <6h-left ones get the ⚠️ warning
+  // /estado: only open (unread=1) topics are listed, and <6h-left ones get the ⚠️ warning
   const now = Date.now();
   q.insertThread.run('IGopenUrgent', 11, 'Urgent (@u)', now); q.setUnread.run(1, 'IGopenUrgent');
   q.insertIn.run('IGopenUrgent', 'hola', now - 19 * 3600000);          // 5h left -> warn
@@ -117,7 +117,7 @@ function selftest() {
   assert(q.blockedList.all().some((r) => r.igsid === 'IGbad' && r.name === 'Bad Guy (@bad)'), 'blocklist shows blocked user with name');
   q.unblock.run('IGbad'); assert(!isBlocked('IGbad'), 'unblock clears user');
   assert(!q.blockedList.all().some((r) => r.igsid === 'IGbad'), 'unblocked user drops off blocklist');
-  // /leaderboards: bumpMember upserts a per-user count, ranked desc
+  // /champions: bumpMember upserts a per-user count, ranked desc
   q.bumpMember.run(101, 'Ana', 1); q.bumpMember.run(101, 'Ana', 2); q.bumpMember.run(102, 'Beto', 3);
   const lb = q.leaderboard.all();
   assert(lb[0].user_id === 101 && lb[0].count === 2, 'leaderboard ranks most-active member first');

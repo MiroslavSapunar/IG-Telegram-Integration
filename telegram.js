@@ -50,7 +50,7 @@ const ack = async (ctx, text) => {
   setTimeout(() => ctx.api.deleteMessage(ctx.chat.id, m.message_id).catch(() => {}), 6000);
 };
 
-// the IGSID of the topic a command was typed in (block/unblock act on it)
+// the IGSID of the topic a command was typed in (bloquear/desbloquear act on it)
 const igsidOfTopic = (ctx) => {
   const tid = ctx.message?.message_thread_id;
   return tid ? q.igsidByThread.get(tid)?.igsid : undefined;
@@ -59,21 +59,36 @@ const igsidOfTopic = (ctx) => {
 // helper to find the group's chat id: type /id in the group
 bot.command('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
 
-bot.command('help', (ctx) => ctx.reply(
+bot.command('ayuda', (ctx) => ctx.reply(
   'Comandos:\n' +
-  '/help — esta lista\n' +
+  '/ayuda — esta lista\n' +
+  '/manual — guía rápida para responder (flujo + comandos básicos)\n' +
   '/general — (respondiendo a un mensaje) lo copia al tema General\n' +
-  '/read — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
-  '/unread — (dentro del tema) lo reabre como pendiente. Agrega ❗ al inicio del nombre\n' +
-  '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
-  '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
-  '/blocklist — lista los usuarios bloqueados\n' +
-  '/leaderboards — ranking de mensajes por miembro (sin General)\n' +
-  '/status — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
-  '/health — estado del bot y del token de Instagram\n' +
-  '/prune — borra chats sin actividad hace más de 1 año\n' +
+  '/resuelto — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
+  '/pendiente — (dentro del tema) lo reabre como pendiente. Agrega ❗ al inicio del nombre\n' +
+  '/bloquear — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
+  '/desbloquear — (dentro del tema) vuelve a reenviar sus mensajes\n' +
+  '/bloqueados — lista los usuarios bloqueados\n' +
+  '/champions — ranking de mensajes por miembro (sin General)\n' +
+  '/estado — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
+  '/servercheck — estado del bot y del token de Instagram\n' +
+  '/purgar — borra chats sin actividad hace más de 1 año\n' +
   '/id — muestra el id de este chat\n\n' +
   'Para responder a alguien, escribí dentro de su tema y se le manda como DM en Instagram.'
+));
+
+// narrative guide for regular members: how the bridge works + the day-to-day commands
+bot.command('manual', (ctx) => ctx.reply(
+  '📖 Cómo funciona\n\n' +
+  'Cada persona que escribe por Instagram tiene su propio tema acá. El ❗ al inicio del nombre = pendiente de respuesta.\n\n' +
+  '✍️ Para responder: escribí DENTRO del tema de esa persona. Tu mensaje le llega como DM en Instagram.\n\n' +
+  '⏰ Ventana de 24h: Instagram solo deja responder hasta 24h después del último mensaje del usuario; pasado ese tiempo el bot avisa "IG send failed".\n\n' +
+  '✅ /resuelto (dentro del tema): cuando terminaste, lo cierra y le saca el ❗. Si el usuario vuelve a escribir, se reabre solo.\n\n' +
+  '↩️ /pendiente: lo vuelve a marcar como pendiente.\n\n' +
+  '😀 Reacciones: si reaccionás con un emoji a un mensaje, esa reacción también aparece en Instagram.\n\n' +
+  '📋 /estado: muestra los temas abiertos y cuánto queda de la ventana de 24h (⚠️ = quedan menos de 6h).\n\n' +
+  '📎 Las fotos, videos y audios llegan al tema; si no se pueden cargar, llega un link.\n\n' +
+  'ℹ️ /ayuda lista todos los comandos.'
 ));
 
 // reply to a message + /general -> copy it into General with a button back to the topic
@@ -94,47 +109,47 @@ bot.command('general', async (ctx) => {
   }
 });
 
-bot.command('block', async (ctx) => {
+bot.command('bloquear', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
-  if (!igsid) return ctx.reply('Usá /block dentro del tema del usuario.');
+  if (!igsid) return ctx.reply('Usá /bloquear dentro del tema del usuario.');
   q.block.run(igsid, Date.now());
   await ack(ctx, '🚫 Usuario bloqueado: no se reenviarán más mensajes suyos (no se bloquea en Instagram).');
 });
-bot.command('unblock', async (ctx) => {
+bot.command('desbloquear', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
-  if (!igsid) return ctx.reply('Usá /unblock dentro del tema del usuario.');
+  if (!igsid) return ctx.reply('Usá /desbloquear dentro del tema del usuario.');
   q.unblock.run(igsid);
   await ack(ctx, '✅ Usuario desbloqueado.');
 });
-bot.command('blocklist', (ctx) => {
+bot.command('bloqueados', (ctx) => {
   const rows = q.blockedList.all();
   const seen = new Set(rows.map((r) => r.igsid));
   const env = [...envBlocked].filter((id) => !seen.has(id));   // env-seeded blocks not also blocked at runtime
   if (!rows.length && !env.length) return ctx.reply('✅ No hay usuarios bloqueados.');
   const lines = rows.map((r) => `• ${r.name || r.igsid}`).concat(env.map((id) => `• ${id} (env)`));
-  ctx.reply(`🚫 Bloqueados (${lines.length}) — /unblock dentro del tema para desbloquear:\n${lines.join('\n')}`);
+  ctx.reply(`🚫 Bloqueados (${lines.length}) — /desbloquear dentro del tema para desbloquear:\n${lines.join('\n')}`);
 });
-bot.command('leaderboards', (ctx) => {
+bot.command('champions', (ctx) => {
   const rows = q.leaderboard.all();
   if (!rows.length) return ctx.reply('Todavía no hay mensajes registrados.');
   const medal = (i) => ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
   const lines = rows.map((r, i) => `${medal(i)} ${r.name || r.user_id} — ${r.count}`);
   ctx.reply(`🏆 Mensajes por miembro (sin General):\n${lines.join('\n')}`);
 });
-bot.command('read', async (ctx) => {
+bot.command('resuelto', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
-  if (!igsid) return ctx.reply('Usá /read dentro del tema para marcarlo resuelto.');
+  if (!igsid) return ctx.reply('Usá /resuelto dentro del tema para marcarlo resuelto.');
   await setTopicOpen(igsid, false);                          // resuelto -> cerrar (sale de la lista activa)
   await ctx.deleteMessage().catch(() => {});
 });
-bot.command('unread', async (ctx) => {
+bot.command('pendiente', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
-  if (!igsid) return ctx.reply('Usá /unread dentro del tema para reabrirlo como pendiente.');
+  if (!igsid) return ctx.reply('Usá /pendiente dentro del tema para reabrirlo como pendiente.');
   await setTopicOpen(igsid, true);
   await ctx.deleteMessage().catch(() => {});
 });
-bot.command('status', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
-bot.command('health', async (ctx) => {
+bot.command('estado', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
+bot.command('servercheck', async (ctx) => {
   let ig;
   try {
     const r = await fetch(`https://graph.instagram.com/v25.0/me?fields=username&access_token=${IG_ACCESS_TOKEN}`);
@@ -147,7 +162,7 @@ bot.command('health', async (ctx) => {
 });
 
 // manual cleanup: delete topics with no activity in over a year (history stays in SQLite)
-bot.command('prune', async (ctx) => {
+bot.command('purgar', async (ctx) => {
   const cutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
   const stale = q.staleThreads.all(cutoff);
   let deleted = 0, errors = 0;
@@ -157,10 +172,10 @@ bot.command('prune', async (ctx) => {
     q.deleteThread.run(t.thread_id);
     deleted++;
   }
-  await ctx.reply(`🧹 Prune: ${deleted} tema(s) sin actividad hace +1 año eliminados${errors ? `, ${errors} con error` : ''}.`);
+  await ctx.reply(`🧹 Purga: ${deleted} tema(s) sin actividad hace +1 año eliminados${errors ? `, ${errors} con error` : ''}.`);
 });
 
-// tally each member's messages in user topics (everything but General + commands) for /leaderboards.
+// tally each member's messages in user topics (everything but General + commands) for /champions.
 // runs first and calls next() so the relay handler below still fires.
 bot.on('message', async (ctx, next) => {
   const u = ctx.from;
@@ -182,7 +197,7 @@ bot.on('message:text', async (ctx) => {
     q.insertOut.run(row.igsid, ctx.message.text, Date.now());
     if (r?.message_id) q.insertFwd.run(ctx.message.message_id, row.igsid, r.message_id); // so A's IG reaction on this reply mirrors back
     // leave the topic OPEN: a member may send follow-ups, and they're regulars who can't post once it's closed.
-    // Closing is a deliberate /read.
+    // Closing is a deliberate /resuelto.
   } catch (e) {
     await ctx.reply(`❌ IG send failed: ${e.message}`);       // e.g. outside 24h window
   }
@@ -211,13 +226,13 @@ export async function mirrorReaction(m) {
 }
 
 // open/closed IS the attention signal: a topic stays OPEN while it needs the team (new DM or live
-// conversation) and is CLOSED once someone marks it resolved with /read; closed topics drop out of the
+// conversation) and is CLOSED once someone marks it resolved with /resuelto; closed topics drop out of the
 // active list. A new inbound DM reopens it. `unread` in db = "is open", tracked so we only hit the
 // Telegram API on an actual state change (and avoid TOPIC_NOT_MODIFIED noise).
 export async function setTopicOpen(igsid, open) {
   const row = q.threadFull.get(igsid);
   if (!row) return;
-  q.setUnread.run(open ? 1 : 0, igsid);                  // the flag drives /status — persist it first, no matter what TG does
+  q.setUnread.run(open ? 1 : 0, igsid);                  // the flag drives /estado — persist it first, no matter what TG does
   if (row.unread === (open ? 1 : 0)) return;             // already in that state -> nothing to change
   // two independent best-effort calls: a no-op on one (TOPIC_NOT_MODIFIED) must not skip the other
   try {
