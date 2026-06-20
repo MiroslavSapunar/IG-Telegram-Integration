@@ -78,13 +78,15 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - `/status`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"
-- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/blocklist` `/health` `/prune` `/id`
+- `/leaderboards`: per-member tally of messages sent in user topics (not General), ranked. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
+- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/blocklist` `/leaderboards` `/health` `/prune` `/id`
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
 - `threads`: `igsid` ↔ `thread_id` (forum topic) + `unread` flag — persistent routing + marker state
 - `blocked`: soft-blocked IGSIDs (also seedable via `BLOCKED_IGSIDS` env)
 - `fwd`: Telegram message ↔ IG message id (`mid`) — inbound forwards *and* outbound replies — for two-way reaction sync
+- `members`: Telegram `user_id` → message `count` in topics (not General), for `/leaderboards`
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit

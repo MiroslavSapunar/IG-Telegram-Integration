@@ -39,6 +39,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS fwd(
   igsid TEXT NOT NULL,
   ig_mid TEXT NOT NULL                 -- the IG message it represents (for reactions)
 )`);
+db.exec(`CREATE TABLE IF NOT EXISTS members(
+  user_id INTEGER PRIMARY KEY,         -- telegram user id of a group member
+  name TEXT,
+  count INTEGER NOT NULL DEFAULT 0,    -- messages sent in topics (not General) — for /leaderboards
+  updated_at INTEGER
+)`);
 const q = {
   insertIn:      db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
   insertOut:     db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'out', ?, ?)`),
@@ -66,6 +72,9 @@ const q = {
   insertFwd:     db.prepare(`INSERT OR REPLACE INTO fwd(tg_message_id,igsid,ig_mid) VALUES(?,?,?)`),
   fwdByTg:       db.prepare(`SELECT igsid, ig_mid FROM fwd WHERE tg_message_id=?`),
   fwdByMid:      db.prepare(`SELECT tg_message_id FROM fwd WHERE ig_mid=?`),
+  bumpMember:    db.prepare(`INSERT INTO members(user_id,name,count,updated_at) VALUES(?,?,1,?)
+    ON CONFLICT(user_id) DO UPDATE SET count=count+1, name=excluded.name, updated_at=excluded.updated_at`),
+  leaderboard:   db.prepare(`SELECT user_id, name, count FROM members ORDER BY count DESC, name LIMIT 20`),
 };
 
 // soft blocklist: env seed + runtime /block. Dropped before forwarding (NOT blocked on Instagram).
@@ -178,10 +187,11 @@ async function main() {
     '/help — esta lista\n' +
     '/general — (respondiendo a un mensaje) lo copia al tema General\n' +
     '/read — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
-    '/unread — (dentro del tema) lo reabre como pendiente\n' +
+    '/unread — (dentro del tema) lo reabre como pendiente. Agrega ✉️ al inicio del nombre\n' +
     '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
     '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
     '/blocklist — lista los usuarios bloqueados\n' +
+    '/leaderboards — ranking de mensajes por miembro (sin General)\n' +
     '/status — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
     '/health — estado del bot y del token de Instagram\n' +
     '/prune — borra chats sin actividad hace más de 1 año\n' +
@@ -233,6 +243,13 @@ async function main() {
     const lines = rows.map((r) => `• ${r.name || r.igsid}`).concat(env.map((id) => `• ${id} (env)`));
     ctx.reply(`🚫 Bloqueados (${lines.length}) — /unblock dentro del tema para desbloquear:\n${lines.join('\n')}`);
   });
+  bot.command('leaderboards', (ctx) => {
+    const rows = q.leaderboard.all();
+    if (!rows.length) return ctx.reply('Todavía no hay mensajes registrados.');
+    const medal = (i) => ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+    const lines = rows.map((r, i) => `${medal(i)} ${r.name || r.user_id} — ${r.count}`);
+    ctx.reply(`🏆 Mensajes por miembro (sin General):\n${lines.join('\n')}`);
+  });
   bot.command('read', async (ctx) => {
     const igsid = igsidOfTopic(ctx);
     if (!igsid) return ctx.reply('Usá /read dentro del tema para marcarlo resuelto.');
@@ -271,6 +288,17 @@ async function main() {
       deleted++;
     }
     await ctx.reply(`🧹 Prune: ${deleted} tema(s) sin actividad hace +1 año eliminados${errors ? `, ${errors} con error` : ''}.`);
+  });
+
+  // tally each member's messages in user topics (everything but General + commands) for /leaderboards.
+  // runs first and calls next() so the relay handler below still fires.
+  bot.on('message', async (ctx, next) => {
+    const u = ctx.from;
+    if (ctx.message?.message_thread_id && u && !u.is_bot && !ctx.message.text?.startsWith('/')) {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.username ? `@${u.username}` : String(u.id));
+      q.bumpMember.run(u.id, name, Date.now());
+    }
+    await next();
   });
 
   // a member typing inside a user's topic -> relay text back to that IG user
@@ -481,6 +509,11 @@ function selftest() {
   assert(q.blockedList.all().some((r) => r.igsid === 'IGbad' && r.name === 'Bad Guy (@bad)'), 'blocklist shows blocked user with name');
   q.unblock.run('IGbad'); assert(!isBlocked('IGbad'), 'unblock clears user');
   assert(!q.blockedList.all().some((r) => r.igsid === 'IGbad'), 'unblocked user drops off blocklist');
+  // /leaderboards: bumpMember upserts a per-user count, ranked desc
+  q.bumpMember.run(101, 'Ana', 1); q.bumpMember.run(101, 'Ana', 2); q.bumpMember.run(102, 'Beto', 3);
+  const lb = q.leaderboard.all();
+  assert(lb[0].user_id === 101 && lb[0].count === 2, 'leaderboard ranks most-active member first');
+  assert(lb.find((r) => r.user_id === 102)?.count === 1, 'each member counted once per message');
   // reaction passthrough: fwd mapping + emoji selection
   q.insertFwd.run(42, 'IGz', 'mid_1');
   assert(q.fwdByTg.get(42)?.ig_mid === 'mid_1', 'fwd maps tg message -> ig mid');

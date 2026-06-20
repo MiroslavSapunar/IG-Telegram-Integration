@@ -41,7 +41,7 @@ IG user DMs the account (text or media)
 
 `/help` `/general` (reply to a message → copy it to #General with a back-link) `/read` `/unread`
 (close as resolved / reopen as pending) `/block` `/unblock` (soft-ignore a user, not blocked on IG)
-`/blocklist` (list blocked users)
+`/blocklist` (list blocked users) `/leaderboards` (per-member message count, excludes General)
 `/status` (open topics + 24h-window time left, ⚠️ under 6h) `/health` (bot + IG token status)
 `/prune` (delete topics inactive > 1 year) `/id` (chat id).
 
