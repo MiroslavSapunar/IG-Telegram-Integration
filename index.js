@@ -122,6 +122,7 @@ const reactIG = (igsid, mid, emoji) => igMessages(emoji
 
 // open topics + how long is left on each one's IG 24h reply window (from the user's last inbound DM)
 const WINDOW_MS = 24 * 60 * 60 * 1000, WARN_MS = 6 * 60 * 60 * 1000;
+const OPEN_BADGE = '🔴';   // name prefix on open/pending topics; removed when /read closes them
 const fmtLeft = (ms) => {
   const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
   return h ? `${h}h ${m}m` : `${m}m`;
@@ -317,20 +318,26 @@ async function main() {
   // Telegram API on an actual state change (and avoid TOPIC_NOT_MODIFIED noise).
   async function setTopicOpen(igsid, open) {
     const row = q.threadFull.get(igsid);
-    if (!row || row.unread === (open ? 1 : 0)) return;
+    if (!row) return;
+    q.setUnread.run(open ? 1 : 0, igsid);                  // the flag drives /status — persist it first, no matter what TG does
+    if (row.unread === (open ? 1 : 0)) return;             // already in that state -> nothing to change
+    // two independent best-effort calls: a no-op on one (TOPIC_NOT_MODIFIED) must not skip the other
     try {
       if (open) await bot.api.reopenForumTopic(TELEGRAM_CHAT_ID, row.thread_id);
       else await bot.api.closeForumTopic(TELEGRAM_CHAT_ID, row.thread_id);
-      q.setUnread.run(open ? 1 : 0, igsid);
-    } catch (e) { console.error('open topic:', e.description || e.message); }
+    } catch (e) { console.error('open/close topic:', e.description || e.message); }
+    const name = (open ? `${OPEN_BADGE} ${row.name || ''}` : (row.name || '')).slice(0, 128); // db stores the base name
+    try {
+      await bot.api.editForumTopic(TELEGRAM_CHAT_ID, row.thread_id, { name });
+    } catch (e) { console.error('badge topic:', e.description || e.message); }
   }
 
   // create a fresh forum topic for this user and (re)store the mapping. Created only from an inbound DM,
-  // so it starts open. Icon is baked in at creation (no edit -> no "changed the topic" service message).
+  // so it starts open with the badge baked into the name + icon (no extra edit -> no rename service message).
   async function createTopic(igsid) {
     const name = (await displayName(igsid)).slice(0, 128);
-    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, name, TOPIC_ICON ? { icon_custom_emoji_id: TOPIC_ICON } : {});
-    q.insertThread.run(igsid, topic.message_thread_id, name, Date.now());
+    const topic = await bot.api.createForumTopic(TELEGRAM_CHAT_ID, `${OPEN_BADGE} ${name}`.slice(0, 128), TOPIC_ICON ? { icon_custom_emoji_id: TOPIC_ICON } : {});
+    q.insertThread.run(igsid, topic.message_thread_id, name, Date.now()); // store the base name (no badge)
     q.setUnread.run(1, igsid);                                   // fresh topic is open / needs attention
     console.log(`created topic ${topic.message_thread_id} for ${name}`);
     return topic.message_thread_id;
