@@ -15,7 +15,7 @@ Current (implemented, no AI yet):
 1. DM arrives on Instagram
 2. Meta sends a `messages` webhook to our server
 3. Server verifies the signature, acks HTTP 200, stores the message in SQLite
-4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `🔴 Name (@username)`, branded with a topic icon), **reopening** it if it was closed (open / 🔴 = needs attention)
+4. Server forwards the DM — text **and media** (image/video/audio/file) — into that user's Telegram **forum topic** (created on first contact, named `✉️ Name (@username)`, branded with a topic icon), **reopening** it if it was closed (open / ✉️ = needs attention)
 5. A union member types a reply **inside that topic** (it stays open for follow-ups; `/read` closes it once resolved); emoji reactions sync both ways between the forwarded/replied message and its IG counterpart
 6. Server maps the topic to the sender's IGSID and sends it back via the IG API (within the 24h window)
 
@@ -73,12 +73,12 @@ Everything runs in a single Node process (`index.js`): HTTP webhook server + gra
 - Supergroup with **Topics** enabled; one **forum topic per IG user** (created on first DM, auto-recreated if deleted)
 - Reply routing: a member typing in a topic → mapped via the topic's `message_thread_id` to the IGSID → sent to IG
 - Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
-- Attention via topic **open/closed** + a 🔴 name badge: open (🔴) = needs the team, closed = resolved (`/read`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/read`). The 🔴 prefix and an icon are baked into the name at creation and the badge toggles only on open↔closed transitions (not per message); command acks + `/read`/`/unread` self-delete so the preview stays the real conversation
+- Attention via topic **open/closed** + a ✉️ name badge: open (✉️) = needs the team, closed = resolved (`/read`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/read`). The ✉️ prefix and an icon are baked into the name at creation and the badge toggles only on open↔closed transitions (not per message); command acks + `/read`/`/unread` self-delete so the preview stays the real conversation
 - Reactions sync **both ways**: a member's reaction in Telegram → IG message (remove → unreact); an IG user's reaction (on their message or a member's reply) → the Telegram message, mapped to Telegram's fixed reaction set. Both directions need the `fwd` table to map IG message id ↔ Telegram message id (now stored for inbound *and* outbound)
 - `/status`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram)
 - Requires the bot to be admin with "Manage Topics"
-- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/health` `/prune` `/id`
+- Commands: `/help` `/general` (copy to General with a back-link) `/read` `/unread` `/status` `/block` `/unblock` `/blocklist` `/health` `/prune` `/id`
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)

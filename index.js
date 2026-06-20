@@ -60,6 +60,8 @@ const q = {
   isBlocked:     db.prepare(`SELECT 1 FROM blocked WHERE igsid=?`),
   block:         db.prepare(`INSERT OR IGNORE INTO blocked(igsid,created_at) VALUES(?,?)`),
   unblock:       db.prepare(`DELETE FROM blocked WHERE igsid=?`),
+  blockedList:   db.prepare(`SELECT b.igsid, t.name, t.thread_id FROM blocked b
+    LEFT JOIN threads t ON t.igsid=b.igsid ORDER BY b.created_at`),
   lastInbound:   db.prepare(`SELECT MAX(created_at) AS t FROM messages WHERE direction='in'`),
   insertFwd:     db.prepare(`INSERT OR REPLACE INTO fwd(tg_message_id,igsid,ig_mid) VALUES(?,?,?)`),
   fwdByTg:       db.prepare(`SELECT igsid, ig_mid FROM fwd WHERE tg_message_id=?`),
@@ -122,7 +124,7 @@ const reactIG = (igsid, mid, emoji) => igMessages(emoji
 
 // open topics + how long is left on each one's IG 24h reply window (from the user's last inbound DM)
 const WINDOW_MS = 24 * 60 * 60 * 1000, WARN_MS = 6 * 60 * 60 * 1000;
-const OPEN_BADGE = '🔴';   // name prefix on open/pending topics; removed when /read closes them
+const OPEN_BADGE = '✉️';   // name prefix on open/pending topics; removed when /read closes them
 const fmtLeft = (ms) => {
   const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
   return h ? `${h}h ${m}m` : `${m}m`;
@@ -179,6 +181,7 @@ async function main() {
     '/unread — (dentro del tema) lo reabre como pendiente\n' +
     '/block — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
     '/unblock — (dentro del tema) vuelve a reenviar sus mensajes\n' +
+    '/blocklist — lista los usuarios bloqueados\n' +
     '/status — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
     '/health — estado del bot y del token de Instagram\n' +
     '/prune — borra chats sin actividad hace más de 1 año\n' +
@@ -221,6 +224,14 @@ async function main() {
     if (!igsid) return ctx.reply('Usá /unblock dentro del tema del usuario.');
     q.unblock.run(igsid);
     await ack(ctx, '✅ Usuario desbloqueado.');
+  });
+  bot.command('blocklist', (ctx) => {
+    const rows = q.blockedList.all();
+    const seen = new Set(rows.map((r) => r.igsid));
+    const env = [...envBlocked].filter((id) => !seen.has(id));   // env-seeded blocks not also blocked at runtime
+    if (!rows.length && !env.length) return ctx.reply('✅ No hay usuarios bloqueados.');
+    const lines = rows.map((r) => `• ${r.name || r.igsid}`).concat(env.map((id) => `• ${id} (env)`));
+    ctx.reply(`🚫 Bloqueados (${lines.length}) — /unblock dentro del tema para desbloquear:\n${lines.join('\n')}`);
   });
   bot.command('read', async (ctx) => {
     const igsid = igsidOfTopic(ctx);
@@ -466,7 +477,10 @@ function selftest() {
   assert(/🟢 <a[^>]*>Calm/.test(st), 'topic with plenty of time is not warned');
   // blocklist round-trip
   q.block.run('IGbad', 1); assert(isBlocked('IGbad'), 'block marks user');
+  q.insertThread.run('IGbad', 71, 'Bad Guy (@bad)', Date.now());
+  assert(q.blockedList.all().some((r) => r.igsid === 'IGbad' && r.name === 'Bad Guy (@bad)'), 'blocklist shows blocked user with name');
   q.unblock.run('IGbad'); assert(!isBlocked('IGbad'), 'unblock clears user');
+  assert(!q.blockedList.all().some((r) => r.igsid === 'IGbad'), 'unblocked user drops off blocklist');
   // reaction passthrough: fwd mapping + emoji selection
   q.insertFwd.run(42, 'IGz', 'mid_1');
   assert(q.fwdByTg.get(42)?.ig_mid === 'mid_1', 'fwd maps tg message -> ig mid');
