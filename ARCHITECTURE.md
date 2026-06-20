@@ -63,7 +63,10 @@ remaining work is hosting (stable URL) and the AI layer — not Meta approvals.
 
 ## Components
 
-Everything runs in a single Node process (`index.js`): HTTP webhook server + grammy bot + SQLite.
+Everything runs in a single Node process, split into ES modules by scope: `index.js` (entry point —
+HTTP webhook server + bootstrap + offline selftest), `config.js` (env + constants), `db.js` (SQLite
+schema + prepared statements + blocklist), `instagram.js` (IG Graph client + webhook utils), and
+`telegram.js` (grammy bot: commands, handlers, topic lifecycle, status report, 2h cron).
 
 ### 1. Webhook server (native `node:http`)
 - `GET /webhook`: Meta verify-token handshake (echoes `hub.challenge`)

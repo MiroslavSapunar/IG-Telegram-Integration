@@ -113,7 +113,11 @@ End-to-end:
 
 ## Files
 
-- `index.js` — the whole bridge: webhook server + Telegram bot + SQLite (deps: `grammy`, `better-sqlite3`)
+- `index.js` — entry point: webhook server + bootstrap + offline selftest
+- `config.js` — env vars + tuning constants
+- `db.js` — SQLite schema + prepared statements + soft blocklist
+- `instagram.js` — IG Graph client + webhook signature/utils
+- `telegram.js` — grammy bot: commands, handlers, topic lifecycle, status report, 2h cron
 - `data.db` — SQLite message log (gitignored)
 - `ARCHITECTURE.md` — design, Meta API constraints, and findings
 - `FLY.md` — Fly.io deploy cheatsheet
