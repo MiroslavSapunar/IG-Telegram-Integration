@@ -17,9 +17,9 @@ else main().catch((e) => { console.error(e); process.exit(1); });
 async function main() {
   for (const [k, v] of Object.entries({ META_APP_SECRET, IG_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, VERIFY_TOKEN }))
     if (!v) console.warn(`⚠️  ${k} not set`);
-  await initTopicIcon();   // brand new topics with an icon (best-effort) before any DM creates one
+  startWebhook();          // bind :3000 first so fly-proxy + the GET / health check see a listener immediately
+  await initTopicIcon();   // then Telegram setup (network); a DM in this window just gets a topic with no icon
   startBot();
-  startWebhook();
 }
 
 // parse a Meta webhook payload and fan its events out to Telegram
