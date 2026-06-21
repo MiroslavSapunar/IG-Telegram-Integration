@@ -3,7 +3,7 @@
 Bridge between an Instagram professional account's DMs and a private Telegram group.
 Incoming Instagram DMs are forwarded to Telegram; union members reply from Telegram and
 the reply is sent back to the Instagram user. AI-suggested replies are planned but **not
-yet implemented** — see [ARCHITECTURE.md](ARCHITECTURE.md).
+yet implemented** — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Status
 
@@ -54,7 +54,7 @@ Info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` 
 ## Setup — step by step
 
 Requires Node 20+. Assumes you already have a Meta app (Instagram API with Instagram Login)
-and know where to find/add its credentials — see [ARCHITECTURE.md](ARCHITECTURE.md) for the
+and know where to find/add its credentials — see [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
 Meta-side details and constraints.
 
 ### 1. Install deps
@@ -125,5 +125,5 @@ End-to-end:
 - `instagram.js` — IG Graph client + webhook signature/utils
 - `telegram.js` — grammy bot: commands, handlers, topic lifecycle, status report, 2h cron
 - `data.db` — SQLite message log (gitignored)
-- `ARCHITECTURE.md` — design, Meta API constraints, and findings
-- `FLY.md` — Fly.io deploy + backup cheatsheet
+- `docs/ARCHITECTURE.md` — design, Meta API constraints, and findings
+- `docs/FLY.md` — Fly.io deploy + backup cheatsheet
