@@ -121,16 +121,3 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 5. (Phase 4) Claude API key from console.anthropic.com
 
 See the README for the step-by-step run/setup guide.
-
-
-Fly.io details:
-                  ID: vol_4oje010p2geo3ypr
-                Name: ig_data
-                 App: ig-telegram-integration
-              Region: gru
-                Zone: 2237
-             Size GB: 1
-           Encrypted: true
-          Created at: 19 Jun 26 17:22 UTC
-  Snapshot retention: 5
- Scheduled snapshots: true
