@@ -127,6 +127,10 @@ function selftest() {
   assert(q.savedByUser.all(201).length === 2, 'saving the same topic twice keeps one row');
   assert(q.savedByUser.all(201)[0].igsid === 'IGz', 'saved topics list newest first');
   assert(q.savedByUser.all(999).length === 0, 'another user has no saved topics');
+  // meta kv (drives the once-per-version deploy announcement)
+  assert(q.getMeta.get('version') === undefined, 'meta key absent before set');
+  q.setMeta.run('version', '1.0.0'); assert(q.getMeta.get('version').value === '1.0.0', 'meta set/get round-trips');
+  q.setMeta.run('version', '1.0.1'); assert(q.getMeta.get('version').value === '1.0.1', 'meta upserts on conflict');
   // reaction passthrough: fwd mapping + emoji selection
   q.insertFwd.run(42, 'IGz', 'mid_1');
   assert(q.fwdByTg.get(42)?.ig_mid === 'mid_1', 'fwd maps tg message -> ig mid');

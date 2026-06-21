@@ -1,6 +1,6 @@
 // Telegram bot: commands, message/reaction handlers, topic lifecycle, status report, and the 6h cron.
 import { Bot, InputFile } from 'grammy';
-import { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, IG_ACCESS_TOKEN, SELFTEST, WINDOW_MS, WARN_MS, OPEN_BADGE } from './config.js';
+import { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, IG_ACCESS_TOKEN, SELFTEST, WINDOW_MS, WARN_MS, OPEN_BADGE, VERSION } from './config.js';
 import { q, envBlocked } from './db.js';
 import { SENDERS, download, displayName, sendIG, reactIG, pickEmoji } from './instagram.js';
 
@@ -352,10 +352,21 @@ const COMMANDS = [
   ['id', 'Mostrar el id del chat'],
 ].map(([command, description]) => ({ command, description }));
 
+// announce a new version into General, once per version (the flag is stored, so restarts don't re-post).
+// bump `version` in package.json to trigger this on the next deploy.
+async function announceVersion() {
+  if (q.getMeta.get('version')?.value === VERSION) return;   // already announced this version
+  try {
+    await bot.api.sendMessage(TELEGRAM_CHAT_ID, `🚀 ¡Nueva versión ${VERSION}! Verificá las novedades en /ayuda o /manual.`);
+    q.setMeta.run('version', VERSION);                        // persist only after a successful post (so it retries on failure)
+  } catch (e) { console.error('version announce:', e.description || e.message); }
+}
+
 // start polling + the 6h status cron (called from index after initTopicIcon)
 export function startBot() {
   // register the "/" autocomplete menu so it matches the handlers (no manual BotFather step)
   bot.api.setMyCommands(COMMANDS).catch((e) => console.error('setMyCommands:', e.description || e.message));
+  announceVersion();   // post to General if package.json's version changed since last boot
 
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });

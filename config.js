@@ -1,4 +1,7 @@
 // shared configuration: env vars + tuning constants
+import { readFileSync } from 'node:fs';
+
+export const VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 export const PORT = process.env.PORT || 3000;
 export const { VERIFY_TOKEN, META_APP_SECRET, IG_ACCESS_TOKEN, IG_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } = process.env;
 export const SELFTEST = process.argv.includes('--selftest');

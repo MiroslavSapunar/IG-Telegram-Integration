@@ -38,6 +38,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS saved(
   created_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, igsid)
 )`);
+db.exec(`CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)`); // small key/value (e.g. last-announced version)
 
 export const q = {
   insertIn:      db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
@@ -71,6 +72,8 @@ export const q = {
   leaderboard:   db.prepare(`SELECT user_id, name, count FROM members ORDER BY count DESC, name LIMIT 10`),
   saveTopic:     db.prepare(`INSERT OR IGNORE INTO saved(user_id,igsid,created_at) VALUES(?,?,?)`),
   savedByUser:   db.prepare(`SELECT igsid FROM saved WHERE user_id=? ORDER BY created_at DESC`),
+  getMeta:       db.prepare(`SELECT value FROM meta WHERE key=?`),
+  setMeta:       db.prepare(`INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`),
 };
 
 // soft blocklist: env seed + runtime /block. Dropped before forwarding (NOT blocked on Instagram).
