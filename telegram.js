@@ -187,7 +187,7 @@ generalCommand('servercheck', async (ctx) => {
 });
 
 // manual cleanup: delete topics with no activity in over a year (history stays in SQLite)
-bot.command('purgar', async (ctx) => {
+generalCommand('purgar', async (ctx) => {
   const cutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
   const stale = q.staleThreads.all(cutoff);
   let deleted = 0, errors = 0;

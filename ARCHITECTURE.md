@@ -83,7 +83,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - Requires the bot to be admin with "Manage Topics"
 - `/respuestas`: per-member tally of messages sent in user topics (not General), top 10. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
 - Commands (Spanish): `/ayuda` `/manual` (member guide) `/general` (copy to General with a back-link) `/resuelto` `/pendiente` `/estado` `/bloquear` `/desbloquear` `/bloqueados` `/respuestas` `/servercheck` `/purgar` `/id`
-- Command scoping: info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas` `/id`) only run in **General** (used inside a user topic they're dropped with a hint, via a `generalCommand` wrapper that checks `message_thread_id`); topic actions (`/resuelto` `/pendiente` `/bloquear` `/desbloquear` `/general`) only run inside a topic
+- Command scoping: info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas` `/purgar` `/id`) only run in **General** (used inside a user topic they're dropped with a hint, via a `generalCommand` wrapper that checks `message_thread_id`); topic actions (`/resuelto` `/pendiente` `/bloquear` `/desbloquear` `/general`) only run inside a topic
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
