@@ -32,6 +32,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS members(
   count INTEGER NOT NULL DEFAULT 0,    -- messages sent in topics (not General) — for /leaderboards
   updated_at INTEGER
 )`);
+db.exec(`CREATE TABLE IF NOT EXISTS saved(
+  user_id INTEGER NOT NULL,            -- telegram user who bookmarked the topic
+  igsid TEXT NOT NULL,                 -- the saved topic (stable key; survives topic recreation)
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, igsid)
+)`);
 
 export const q = {
   insertIn:      db.prepare(`INSERT INTO messages(igsid,direction,text,created_at) VALUES(?, 'in', ?, ?)`),
@@ -63,6 +69,8 @@ export const q = {
   bumpMember:    db.prepare(`INSERT INTO members(user_id,name,count,updated_at) VALUES(?,?,1,?)
     ON CONFLICT(user_id) DO UPDATE SET count=count+1, name=excluded.name, updated_at=excluded.updated_at`),
   leaderboard:   db.prepare(`SELECT user_id, name, count FROM members ORDER BY count DESC, name LIMIT 10`),
+  saveTopic:     db.prepare(`INSERT OR IGNORE INTO saved(user_id,igsid,created_at) VALUES(?,?,?)`),
+  savedByUser:   db.prepare(`SELECT igsid FROM saved WHERE user_id=? ORDER BY created_at DESC`),
 };
 
 // soft blocklist: env seed + runtime /block. Dropped before forwarding (NOT blocked on Instagram).

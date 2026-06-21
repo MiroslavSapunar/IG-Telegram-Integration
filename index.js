@@ -122,6 +122,11 @@ function selftest() {
   const lb = q.leaderboard.all();
   assert(lb[0].user_id === 101 && lb[0].count === 2, 'leaderboard ranks most-active member first');
   assert(lb.find((r) => r.user_id === 102)?.count === 1, 'each member counted once per message');
+  // /guardar + /guardados: per-user topic bookmarks (save-only, idempotent)
+  q.saveTopic.run(201, 'IG123', 1); q.saveTopic.run(201, 'IG123', 2); q.saveTopic.run(201, 'IGz', 3);
+  assert(q.savedByUser.all(201).length === 2, 'saving the same topic twice keeps one row');
+  assert(q.savedByUser.all(201)[0].igsid === 'IGz', 'saved topics list newest first');
+  assert(q.savedByUser.all(999).length === 0, 'another user has no saved topics');
   // reaction passthrough: fwd mapping + emoji selection
   q.insertFwd.run(42, 'IGz', 'mid_1');
   assert(q.fwdByTg.get(42)?.ig_mid === 'mid_1', 'fwd maps tg message -> ig mid');

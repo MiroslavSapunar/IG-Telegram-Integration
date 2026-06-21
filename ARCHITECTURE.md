@@ -82,8 +82,9 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram); `/bloquear`/`/desbloquear` post an audit note to General
 - Requires the bot to be admin with "Manage Topics"
 - `/respuestas`: per-member tally of messages sent in user topics (not General), top 10. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
-- Commands (Spanish): `/ayuda` `/manual` (member guide) `/compartir` (copy to General with a back-link) `/resuelto` `/pendiente` `/estado` `/bloquear` `/desbloquear` `/bloqueados` `/respuestas` `/servercheck` `/purgar` `/id`
-- Command scoping: info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas` `/purgar` `/id`) only run in **General** (used inside a user topic they're dropped with a hint, via a `generalCommand` wrapper that checks `message_thread_id`); topic actions (`/resuelto` `/pendiente` `/bloquear` `/desbloquear` `/compartir`) only run inside a topic
+- `/guardar` / `/guardados`: per-user topic bookmarks. `/guardar` (in a topic) saves it to the caller's list (save-only); `/guardados` (in General) lists them with links and self-deletes after ~60s (the data persists). Saved by `igsid`, so a pruned/deleted topic just drops out of the list
+- Commands (Spanish): `/ayuda` `/manual` (member guide) `/compartir` (copy to General with a back-link) `/resuelto` `/pendiente` `/guardar` `/guardados` `/estado` `/bloquear` `/desbloquear` `/bloqueados` `/respuestas` `/servercheck` `/purgar` `/id`
+- Command scoping: info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas` `/guardados` `/purgar` `/id`) only run in **General** (used inside a user topic they're dropped with a hint, via a `generalCommand` wrapper that checks `message_thread_id`); topic actions (`/resuelto` `/pendiente` `/bloquear` `/desbloquear` `/compartir` `/guardar`) only run inside a topic
 
 ### 3. Storage (SQLite, `better-sqlite3`, on the Fly volume at `/data/data.db` — survives deploys)
 - `messages`: `igsid`, `direction` (in/out), `text`, `created_at` — conversation history (follow-ups + dates)
@@ -91,6 +92,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - `blocked`: soft-blocked IGSIDs (also seedable via `BLOCKED_IGSIDS` env)
 - `fwd`: Telegram message ↔ IG message id (`mid`) — inbound forwards *and* outbound replies — for two-way reaction sync
 - `members`: Telegram `user_id` → message `count` in topics (not General), for `/respuestas`
+- `saved`: `(user_id, igsid)` → per-user topic bookmarks, for `/guardar` / `/guardados`
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit

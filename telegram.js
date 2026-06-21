@@ -43,11 +43,12 @@ export async function initTopicIcon() {
   } catch (e) { console.error('icon stickers:', e.message); }
 }
 
-// ack a command then self-destruct + drop the command message: neither should linger as the topic's preview line
-const ack = async (ctx, text) => {
+// ack a command then self-destruct + drop the command message: neither should linger as a preview line.
+// default ~6s; pass { ms, ...sendOpts } to change the lifetime or add parse_mode/link options.
+const ack = async (ctx, text, { ms = 6000, ...opts } = {}) => {
   await ctx.deleteMessage().catch(() => {});
-  const m = await ctx.reply(text);
-  setTimeout(() => ctx.api.deleteMessage(ctx.chat.id, m.message_id).catch(() => {}), 6000);
+  const m = await ctx.reply(text, opts);
+  setTimeout(() => ctx.api.deleteMessage(ctx.chat.id, m.message_id).catch(() => {}), ms);
 };
 
 // the IGSID of the topic a command was typed in (bloquear/desbloquear act on it)
@@ -82,10 +83,12 @@ generalCommand('ayuda', (ctx) => ctx.reply(
   '/compartir — (respondiendo a un mensaje) lo copia al tema General\n' +
   '/resuelto — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
   '/pendiente — (dentro del tema) lo reabre como pendiente. Agrega ❗ al inicio del nombre\n' +
+  '/guardar — (dentro del tema) lo guarda en tu lista personal\n' +
   '/bloquear — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
   '/desbloquear — (dentro del tema) vuelve a reenviar sus mensajes\n' +
   '/bloqueados — lista los usuarios bloqueados\n' +
   '/respuestas — mensajes enviados por cada miembro (sin General)\n' +
+  '/guardados — tus temas guardados (en General)\n' +
   '/estado — lista los temas abiertos y cuánto queda de la ventana de 24h (⚠️ si quedan <6h)\n' +
   '/servercheck — estado del bot y del token de Instagram\n' +
   '/purgar — borra chats sin actividad hace más de 1 año\n' +
@@ -101,6 +104,7 @@ generalCommand('manual', (ctx) => ctx.reply(
   '⏰ Ventana de 24h: Instagram solo deja responder hasta 24h después del último mensaje del usuario; pasado ese tiempo el bot avisa "IG send failed".\n\n' +
   '✅ /resuelto (dentro del tema): cuando terminaste, lo cierra y le saca el ❗. Si el usuario vuelve a escribir, se reabre solo. Queda registrado en General quién lo resolvió.\n\n' +
   '↩️ /pendiente: lo vuelve a marcar como pendiente (también queda registrado en General).\n\n' +
+  '⭐ /guardar (dentro del tema): lo guarda en tu lista personal para no perderlo; /guardados (en General) muestra tu lista.\n\n' +
   '😀 Reacciones: si reaccionás con un emoji a un mensaje, esa reacción también aparece en Instagram.\n\n' +
   '📋 /estado: muestra los temas abiertos y cuánto queda de la ventana de 24h (⚠️ = quedan menos de 6h).\n\n' +
   '📎 Las fotos, videos y audios llegan al tema; si no se pueden cargar, llega un link.\n\n' +
@@ -155,6 +159,16 @@ generalCommand('respuestas', (ctx) => {
   const lines = rows.map((r) => `• ${r.name || r.user_id} — ${r.count}`);
   ctx.reply(`📊 Respuestas por miembro (sin General):\n${lines.join('\n')}`);
 });
+// your personal saved-topics list; self-deletes after ~60s (the data persists — re-run anytime)
+generalCommand('guardados', (ctx) => {
+  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');
+  const lines = q.savedByUser.all(ctx.from.id)
+    .map((s) => q.threadFull.get(s.igsid))                  // resolve igsid -> topic (name + thread_id)
+    .filter(Boolean)                                        // skip topics that were pruned/deleted
+    .map((t) => `• <a href="https://t.me/c/${chatC}/${t.thread_id}">${esc(t.name || '?')}</a>`);
+  const text = lines.length ? `⭐ Tus temas guardados:\n${lines.join('\n')}` : 'No tenés temas guardados. Usá /guardar dentro de un tema.';
+  return ack(ctx, text, { ms: 60000, parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+});
 bot.command('resuelto', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
   if (!igsid) return ctx.reply('Usá /resuelto dentro del tema para marcarlo resuelto.');
@@ -172,6 +186,13 @@ bot.command('pendiente', async (ctx) => {
   await setTopicOpen(igsid, true);
   await ctx.deleteMessage().catch(() => {});
   if (wasClosed) await logToGeneral(ctx, row, igsid, '↩️', 'reabierto por');
+});
+// bookmark this topic to the caller's personal list (per Telegram user); list it with /guardados in General
+bot.command('guardar', async (ctx) => {
+  const igsid = igsidOfTopic(ctx);
+  if (!igsid) return ctx.reply('Usá /guardar dentro del tema que querés guardar.');
+  q.saveTopic.run(ctx.from.id, igsid, Date.now());          // save-only (INSERT OR IGNORE)
+  await ack(ctx, '⭐ Guardado. Vé tu lista con /guardados en General.');
 });
 generalCommand('estado', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
 generalCommand('servercheck', async (ctx) => {
@@ -321,6 +342,8 @@ const COMMANDS = [
   ['compartir', '(respondiendo) copiar el mensaje al tema General'],
   ['resuelto', 'Marcar el tema como resuelto y cerrarlo'],
   ['pendiente', 'Reabrir el tema como pendiente'],
+  ['guardar', 'Guardar este tema en tu lista personal'],
+  ['guardados', 'Tus temas guardados'],
   ['bloquear', 'Dejar de reenviar los mensajes del usuario'],
   ['desbloquear', 'Volver a reenviar sus mensajes'],
   ['bloqueados', 'Lista de usuarios bloqueados'],
