@@ -9,6 +9,8 @@ import { SENDERS, download, displayName, sendIG, reactIG, pickEmoji } from './in
 export const bot = new Bot(TELEGRAM_BOT_TOKEN || (SELFTEST ? 'selftest:placeholder' : ''));
 
 const STATUS_OPTS = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
+const CHAT_C = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');   // chat id without the -100 prefix, for t.me/c links
+const topicLink = (threadId) => `https://t.me/c/${CHAT_C}/${threadId}`;
 
 // open topics + how long is left on each one's IG 24h reply window (from the user's last inbound DM)
 const fmtLeft = (ms) => {
@@ -20,14 +22,13 @@ const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt
 export function statusText(now = Date.now()) {
   const rows = q.openTopics.all();
   if (!rows.length) return null;
-  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');     // t.me/c link uses id without -100
   let warn = 0;
   const lines = rows.map((r) => {
     const left = r.last_in == null ? null : (r.last_in + WINDOW_MS) - now;
     const emoji = left == null ? '•' : left <= 0 ? '⛔' : left < WARN_MS ? '⚠️' : '‼️';
     if (left != null && left < WARN_MS) warn++;
     const when = left == null ? 'sin DM entrante' : left <= 0 ? 'ventana vencida' : `${fmtLeft(left)} restantes`;
-    return `${emoji} <a href="https://t.me/c/${chatC}/${r.thread_id}">${esc(r.name || r.igsid)}</a> — ${when}`;
+    return `${emoji} <a href="${topicLink(r.thread_id)}">${esc(r.name || r.igsid)}</a> — ${when}`;
   });
   const head = `📋 Temas abiertos: ${rows.length}${warn ? ` · ⚠️ ${warn} por vencer` : ''}`;
   return [head, ...lines].join('\n');
@@ -62,8 +63,7 @@ const memberName = (u) => [u?.first_name, u?.last_name].filter(Boolean).join(' '
 
 // post a one-line audit note into General (no thread_id), linking back to the topic
 async function logToGeneral(ctx, row, igsid, emoji, verb) {
-  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');
-  const subject = row?.name ? `<a href="https://t.me/c/${chatC}/${row.thread_id}">${esc(row.name)}</a>` : esc(igsid);
+  const subject = row?.name ? `<a href="${topicLink(row.thread_id)}">${esc(row.name)}</a>` : esc(igsid);
   await bot.api.sendMessage(TELEGRAM_CHAT_ID, `${emoji} ${subject} — ${verb} ${esc(memberName(ctx.from))}`, STATUS_OPTS)
     .catch((e) => console.error('general log:', e.description || e.message));
 }
@@ -115,9 +115,8 @@ generalCommand('manual', (ctx) => ctx.reply(
 bot.command('compartir', async (ctx) => {
   const replied = ctx.message?.reply_to_message;
   if (!replied) return ctx.reply('Respondé a un mensaje y luego /compartir para copiarlo al tema General.');
-  const chatC = String(ctx.chat.id).replace(/^-100/, '');         // t.me/c link uses id without -100
   const tid = replied.message_thread_id;
-  const link = `https://t.me/c/${chatC}/${tid ? tid + '/' : ''}${replied.message_id}`;
+  const link = `https://t.me/c/${CHAT_C}/${tid ? tid + '/' : ''}${replied.message_id}`;
   const name = (tid && q.threadName.get(tid)?.name) || 'la conversación';
   try {
     await ctx.api.copyMessage(ctx.chat.id, ctx.chat.id, replied.message_id, { // no thread_id -> General
@@ -161,11 +160,10 @@ generalCommand('respuestas', (ctx) => {
 });
 // your personal saved-topics list; self-deletes after ~60s (the data persists — re-run anytime)
 generalCommand('guardados', (ctx) => {
-  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');
   const lines = q.savedByUser.all(ctx.from.id)
     .map((s) => q.threadFull.get(s.igsid))                  // resolve igsid -> topic (name + thread_id)
     .filter(Boolean)                                        // skip topics that were pruned/deleted
-    .map((t) => `• <a href="https://t.me/c/${chatC}/${t.thread_id}">${esc(t.name || '?')}</a>`);
+    .map((t) => `• <a href="${topicLink(t.thread_id)}">${esc(t.name || '?')}</a>`);
   const text = lines.length ? `⭐ Tus temas guardados:\n${lines.join('\n')}` : 'No tenés temas guardados. Usá /guardar dentro de un tema.';
   return ack(ctx, text, { ms: 60000, parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
 });
