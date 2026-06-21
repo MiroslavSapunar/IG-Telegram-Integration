@@ -59,6 +59,14 @@ const igsidOfTopic = (ctx) => {
 // a Telegram member's display name: full name, else @username, else numeric id
 const memberName = (u) => [u?.first_name, u?.last_name].filter(Boolean).join(' ') || (u?.username ? `@${u.username}` : String(u?.id ?? '?'));
 
+// post a one-line audit note into General (no thread_id), linking back to the topic
+async function logToGeneral(ctx, row, igsid, emoji, verb) {
+  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');
+  const subject = row?.name ? `<a href="https://t.me/c/${chatC}/${row.thread_id}">${esc(row.name)}</a>` : esc(igsid);
+  await bot.api.sendMessage(TELEGRAM_CHAT_ID, `${emoji} ${subject} — ${verb} ${esc(memberName(ctx.from))}`, STATUS_OPTS)
+    .catch((e) => console.error('general log:', e.description || e.message));
+}
+
 // helper to find the group's chat id: type /id in the group
 bot.command('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
 
@@ -87,7 +95,7 @@ bot.command('manual', (ctx) => ctx.reply(
   '✍️ Para responder: escribí DENTRO del tema de esa persona. Tu mensaje le llega como DM en Instagram.\n\n' +
   '⏰ Ventana de 24h: Instagram solo deja responder hasta 24h después del último mensaje del usuario; pasado ese tiempo el bot avisa "IG send failed".\n\n' +
   '✅ /resuelto (dentro del tema): cuando terminaste, lo cierra y le saca el ❗. Si el usuario vuelve a escribir, se reabre solo. Queda registrado en General quién lo resolvió.\n\n' +
-  '↩️ /pendiente: lo vuelve a marcar como pendiente.\n\n' +
+  '↩️ /pendiente: lo vuelve a marcar como pendiente (también queda registrado en General).\n\n' +
   '😀 Reacciones: si reaccionás con un emoji a un mensaje, esa reacción también aparece en Instagram.\n\n' +
   '📋 /estado: muestra los temas abiertos y cuánto queda de la ventana de 24h (⚠️ = quedan menos de 6h).\n\n' +
   '📎 Las fotos, videos y audios llegan al tema; si no se pueden cargar, llega un link.\n\n' +
@@ -145,17 +153,16 @@ bot.command('resuelto', async (ctx) => {
   const wasOpen = row?.unread === 1;                         // only announce a real open -> closed transition
   await setTopicOpen(igsid, false);                          // resuelto -> cerrar (sale de la lista activa)
   await ctx.deleteMessage().catch(() => {});
-  if (!wasOpen) return;                                      // already closed -> don't double-post to General
-  const chatC = String(TELEGRAM_CHAT_ID).replace(/^-100/, '');
-  const subject = row?.name ? `<a href="https://t.me/c/${chatC}/${row.thread_id}">${esc(row.name)}</a>` : esc(igsid);
-  await bot.api.sendMessage(TELEGRAM_CHAT_ID, `✅ ${subject} — resuelto por ${esc(memberName(ctx.from))}`, STATUS_OPTS)
-    .catch((e) => console.error('resuelto log:', e.description || e.message));   // no thread_id -> General
+  if (wasOpen) await logToGeneral(ctx, row, igsid, '✅', 'resuelto por');
 });
 bot.command('pendiente', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
   if (!igsid) return ctx.reply('Usá /pendiente dentro del tema para reabrirlo como pendiente.');
+  const row = q.threadFull.get(igsid);
+  const wasClosed = row?.unread === 0;                       // only announce a real closed -> open transition
   await setTopicOpen(igsid, true);
   await ctx.deleteMessage().catch(() => {});
+  if (wasClosed) await logToGeneral(ctx, row, igsid, '↩️', 'reabierto por');
 });
 bot.command('estado', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
 bot.command('servercheck', async (ctx) => {
