@@ -14,7 +14,7 @@ yet implemented** — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Per-user Telegram forum topics | ✅ |
 | Reply from Telegram → IG (`/me/messages`) | ✅ |
 | Reaction sync (Telegram ↔ IG, both ways) | ✅ |
-| Open-topic `/estado` + 2h alert into General | ✅ |
+| Open-topic `/estado` + 6h alert into General | ✅ |
 | Moderation/ops commands (bloquear, purgar, servercheck, …) | ✅ |
 | Persistence (SQLite on a Fly volume) | ✅ |
 | Deploy (Fly.io, ~64 MB image) | ✅ |
@@ -35,7 +35,7 @@ IG user DMs the account (text or media)
 - **Media** (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/links fall back to a link.
 - **Attention = open/closed topic + ❗ badge**: an open topic (❗ in its name) needs the team; `/resuelto` closes it and drops the badge, a new DM reopens it, so handled chats leave the active list. Replies keep it open (for follow-ups); command acks self-delete so the preview stays the real conversation.
 - **Reactions sync both ways**: a member's emoji reaction in Telegram is mirrored onto the IG message, and an IG user's reaction (on their message or your reply) is mirrored back onto the Telegram message (mapped to Telegram's allowed set).
-- **`/estado`** lists open topics with the time left on each one's IG 24h reply window (`⚠️` under 6h, `⛔` expired); a 2h job auto-posts it into General when anything is open.
+- **`/estado`** lists open topics with the time left on each one's IG 24h reply window (`⚠️` under 6h, `⛔` expired); a 6h job auto-posts it into General when anything is open.
 
 ## Commands
 
@@ -123,7 +123,7 @@ End-to-end:
 - `config.js` — env vars + tuning constants
 - `db.js` — SQLite schema + prepared statements + soft blocklist
 - `instagram.js` — IG Graph client + webhook signature/utils
-- `telegram.js` — grammy bot: commands, handlers, topic lifecycle, status report, 2h cron
+- `telegram.js` — grammy bot: commands, handlers, topic lifecycle, status report, 6h cron
 - `data.db` — SQLite message log (gitignored)
 - `docs/ARCHITECTURE.md` — design, Meta API constraints, and findings
 - `docs/FLY.md` — Fly.io deploy + backup cheatsheet

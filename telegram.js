@@ -1,4 +1,4 @@
-// Telegram bot: commands, message/reaction handlers, topic lifecycle, status report, and the 2h cron.
+// Telegram bot: commands, message/reaction handlers, topic lifecycle, status report, and the 6h cron.
 import { Bot, InputFile } from 'grammy';
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, IG_ACCESS_TOKEN, SELFTEST, WINDOW_MS, WARN_MS, OPEN_BADGE } from './config.js';
 import { q, envBlocked } from './db.js';
@@ -352,7 +352,7 @@ const COMMANDS = [
   ['id', 'Mostrar el id del chat'],
 ].map(([command, description]) => ({ command, description }));
 
-// start polling + the 2h status cron (called from index after initTopicIcon)
+// start polling + the 6h status cron (called from index after initTopicIcon)
 export function startBot() {
   // register the "/" autocomplete menu so it matches the handlers (no manual BotFather step)
   bot.api.setMyCommands(COMMANDS).catch((e) => console.error('setMyCommands:', e.description || e.message));
@@ -360,12 +360,12 @@ export function startBot() {
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });
 
-  // every 2h, post the open-topics status into General so the whole team sees what's pending / about to expire.
+  // every 6h, post the open-topics status into General so the whole team sees what's pending / about to expire.
   // stays quiet when nothing is open. General topic = sendMessage with no message_thread_id.
   setInterval(async () => {
     const text = statusText();
     if (!text) return;                                   // nothing open -> stay quiet (single query, no separate count)
     try { await bot.api.sendMessage(TELEGRAM_CHAT_ID, text, STATUS_OPTS); }
     catch (e) { console.error('status cron:', e.description || e.message); }
-  }, 2 * 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 }

@@ -66,7 +66,7 @@ remaining work is hosting (stable URL) and the AI layer — not Meta approvals.
 Everything runs in a single Node process, split into ES modules by scope: `index.js` (entry point —
 HTTP webhook server + bootstrap + offline selftest), `config.js` (env + constants), `db.js` (SQLite
 schema + prepared statements + blocklist), `instagram.js` (IG Graph client + webhook utils), and
-`telegram.js` (grammy bot: commands, handlers, topic lifecycle, status report, 2h cron).
+`telegram.js` (grammy bot: commands, handlers, topic lifecycle, status report, 6h cron).
 
 ### 1. Webhook server (native `node:http`)
 - `GET /webhook`: Meta verify-token handshake (echoes `hub.challenge`)
@@ -78,7 +78,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - Media (image/video/audio/file) is downloaded and re-uploaded into the topic; shares/unknown/failures → labeled link
 - Attention via topic **open/closed** + a ❗ name badge: open (❗) = needs the team, closed = resolved (`/resuelto`); a new DM reopens it, so handled conversations drop out of the active list. Replies keep the topic open (regulars can't post once it's closed, so closing is a deliberate `/resuelto`). The ❗ prefix and an icon are baked into the name at creation and the badge toggles only on open↔closed transitions (not per message); command acks + `/resuelto`/`/pendiente` self-delete so the preview stays the real conversation. `/resuelto` and `/pendiente` (on a real state transition) post a one-line audit note into General — `✅ <user> — resuelto por <miembro>` / `↩️ <user> — reabierto por <miembro>` — as a team-visible log of who closed/reopened what
 - Reactions sync **both ways**: a member's reaction in Telegram → IG message (remove → unreact); an IG user's reaction (on their message or a member's reply) → the Telegram message, mapped to Telegram's fixed reaction set. Both directions need the `fwd` table to map IG message id ↔ Telegram message id (now stored for inbound *and* outbound)
-- `/estado`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 2h when anything is open
+- `/estado`: lists open topics with the time left on each one's IG 24h reply window (⚠️ <6h, ⛔ expired), most-urgent first; a `setInterval` posts it into General every 6h when anything is open
 - Soft blocklist (drops messages before forwarding; not blocked on Instagram); `/bloquear`/`/desbloquear` post an audit note to General
 - Requires the bot to be admin with "Manage Topics"
 - `/respuestas`: per-member tally of messages sent in user topics (not General), top 10. Counts accrue from deploy onward (the `messages` table has no Telegram author, so no backfill)
@@ -107,7 +107,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - ✅ **Phase 3 — Telegram Bot**: BotFather bot, supergroup with per-user topics, IG DM → Telegram forwarding, moderation/ops commands.
 - ✅ **Phase 5 — Reply Path**: member's Telegram reply → IG via `POST /me/messages`; reaction passthrough; messages persisted in SQLite.
 - ✅ **Phase 6 — Deployment**: multi-stage Dockerfile (~64 MB) + Fly.io (single machine, SQLite on a volume, secrets, stable webhook URL).
-- ✅ **Phase 7 — Triage UX & ops**: open/closed attention model with ❗ badge, two-way reaction sync, `/estado` (24h-window timers) + 2h General alert, `/bloqueados`, `/respuestas`, Spanish command names + `/manual` member guide; `index.js` split into `config`/`db`/`instagram`/`telegram` modules.
+- ✅ **Phase 7 — Triage UX & ops**: open/closed attention model with ❗ badge, two-way reaction sync, `/estado` (24h-window timers) + 6h General alert, `/bloqueados`, `/respuestas`, Spanish command names + `/manual` member guide; `index.js` split into `config`/`db`/`instagram`/`telegram` modules.
 - ⏳ **Phase 4 — Claude AI**: Claude integration, FAQ context, suggested reply in the Telegram card.
 
 (Phase 1's TypeScript/Express scaffold was dropped — native `http` + plain JS was enough.)
