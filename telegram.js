@@ -67,10 +67,15 @@ async function logToGeneral(ctx, row, igsid, emoji, verb) {
     .catch((e) => console.error('general log:', e.description || e.message));
 }
 
-// helper to find the group's chat id: type /id in the group
-bot.command('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
+// register an info/report command that only runs in the General topic (no message_thread_id);
+// typed inside a user topic it's dropped with a brief self-deleting hint so it can't clutter the convo.
+const generalCommand = (name, handler) => bot.command(name, (ctx) =>
+  ctx.message?.message_thread_id ? ack(ctx, `ℹ️ Usá /${name} en el tema General.`) : handler(ctx));
 
-bot.command('ayuda', (ctx) => ctx.reply(
+// helper to find the group's chat id: type /id in the group
+generalCommand('id', (ctx) => ctx.reply(`chat id: ${ctx.chat.id}`));
+
+generalCommand('ayuda', (ctx) => ctx.reply(
   'Comandos:\n' +
   '/ayuda — esta lista\n' +
   '/manual — guía rápida para responder (flujo + comandos básicos)\n' +
@@ -89,7 +94,7 @@ bot.command('ayuda', (ctx) => ctx.reply(
 ));
 
 // narrative guide for regular members: how the bridge works + the day-to-day commands
-bot.command('manual', (ctx) => ctx.reply(
+generalCommand('manual', (ctx) => ctx.reply(
   '📖 Cómo funciona\n\n' +
   'Cada persona que escribe por Instagram tiene su propio tema acá. El ❗ al inicio del nombre = pendiente de respuesta.\n\n' +
   '✍️ Para responder: escribí DENTRO del tema de esa persona. Tu mensaje le llega como DM en Instagram.\n\n' +
@@ -136,7 +141,7 @@ bot.command('desbloquear', async (ctx) => {
   await ack(ctx, '✅ Usuario desbloqueado.');
   if (wasBlocked) await logToGeneral(ctx, q.threadFull.get(igsid), igsid, '✅', 'desbloqueado por');
 });
-bot.command('bloqueados', (ctx) => {
+generalCommand('bloqueados', (ctx) => {
   const rows = q.blockedList.all();
   const seen = new Set(rows.map((r) => r.igsid));
   const env = [...envBlocked].filter((id) => !seen.has(id));   // env-seeded blocks not also blocked at runtime
@@ -144,7 +149,7 @@ bot.command('bloqueados', (ctx) => {
   const lines = rows.map((r) => `• ${r.name || r.igsid}`).concat(env.map((id) => `• ${id} (env)`));
   ctx.reply(`🚫 Bloqueados (${lines.length}) — /desbloquear dentro del tema para desbloquear:\n${lines.join('\n')}`);
 });
-bot.command('respuestas', (ctx) => {
+generalCommand('respuestas', (ctx) => {
   const rows = q.leaderboard.all();   // top 10
   if (!rows.length) return ctx.reply('Todavía no hay mensajes registrados.');
   const lines = rows.map((r) => `• ${r.name || r.user_id} — ${r.count}`);
@@ -168,8 +173,8 @@ bot.command('pendiente', async (ctx) => {
   await ctx.deleteMessage().catch(() => {});
   if (wasClosed) await logToGeneral(ctx, row, igsid, '↩️', 'reabierto por');
 });
-bot.command('estado', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
-bot.command('servercheck', async (ctx) => {
+generalCommand('estado', (ctx) => ctx.reply(statusText() || '✅ No hay temas abiertos.', STATUS_OPTS));
+generalCommand('servercheck', async (ctx) => {
   let ig;
   try {
     const r = await fetch(`https://graph.instagram.com/v25.0/me?fields=username&access_token=${IG_ACCESS_TOKEN}`);

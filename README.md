@@ -46,6 +46,10 @@ resolved / reopen as pending) `/bloquear` `/desbloquear` (soft-ignore a user, no
 `/estado` (open topics + 24h-window time left, ⚠️ under 6h) `/servercheck` (bot + IG token status)
 `/purgar` (delete topics inactive > 1 year) `/id` (chat id).
 
+Info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas` `/id`)
+only run in **#General**; topic actions (`/resuelto` `/pendiente` `/bloquear` `/desbloquear`
+`/general`) only run inside a user topic.
+
 ## Setup — step by step
 
 Requires Node 20+. Assumes you already have a Meta app (Instagram API with Instagram Login)
