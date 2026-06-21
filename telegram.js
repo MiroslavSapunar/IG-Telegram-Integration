@@ -79,7 +79,7 @@ generalCommand('ayuda', (ctx) => ctx.reply(
   'Comandos:\n' +
   '/ayuda — esta lista\n' +
   '/manual — guía rápida para responder (flujo + comandos básicos)\n' +
-  '/general — (respondiendo a un mensaje) lo copia al tema General\n' +
+  '/compartir — (respondiendo a un mensaje) lo copia al tema General\n' +
   '/resuelto — (dentro del tema) lo marca resuelto y lo cierra (se reabre solo con un nuevo DM)\n' +
   '/pendiente — (dentro del tema) lo reabre como pendiente. Agrega ❗ al inicio del nombre\n' +
   '/bloquear — (dentro del tema) deja de reenviar los mensajes de ese usuario\n' +
@@ -107,10 +107,10 @@ generalCommand('manual', (ctx) => ctx.reply(
   'ℹ️ /ayuda lista todos los comandos.'
 ));
 
-// reply to a message + /general -> copy it into General with a button back to the topic
-bot.command('general', async (ctx) => {
+// reply to a message + /compartir -> copy it into General with a button back to the topic
+bot.command('compartir', async (ctx) => {
   const replied = ctx.message?.reply_to_message;
-  if (!replied) return ctx.reply('Respondé a un mensaje y luego /general para copiarlo al tema General.');
+  if (!replied) return ctx.reply('Respondé a un mensaje y luego /compartir para copiarlo al tema General.');
   const chatC = String(ctx.chat.id).replace(/^-100/, '');         // t.me/c link uses id without -100
   const tid = replied.message_thread_id;
   const link = `https://t.me/c/${chatC}/${tid ? tid + '/' : ''}${replied.message_id}`;
@@ -318,7 +318,7 @@ export async function forwardAttachment(igsid, att) {
 const COMMANDS = [
   ['ayuda', 'Lista de comandos'],
   ['manual', 'Guía rápida para responder'],
-  ['general', '(respondiendo) copiar el mensaje al tema General'],
+  ['compartir', '(respondiendo) copiar el mensaje al tema General'],
   ['resuelto', 'Marcar el tema como resuelto y cerrarlo'],
   ['pendiente', 'Reabrir el tema como pendiente'],
   ['bloquear', 'Dejar de reenviar los mensajes del usuario'],

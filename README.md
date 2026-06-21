@@ -39,7 +39,7 @@ IG user DMs the account (text or media)
 
 ## Commands
 
-Commands are in Spanish. `/ayuda` (this list) `/manual` (quick guide for members) `/general`
+Commands are in Spanish. `/ayuda` (this list) `/manual` (quick guide for members) `/compartir`
 (reply to a message → copy it to #General with a back-link) `/resuelto` `/pendiente` (close as
 resolved / reopen as pending) `/bloquear` `/desbloquear` (soft-ignore a user, not blocked on IG)
 `/bloqueados` (list blocked users) `/respuestas` (top-10 replies per member, excludes General)
@@ -48,7 +48,7 @@ resolved / reopen as pending) `/bloquear` `/desbloquear` (soft-ignore a user, no
 
 Info/report commands (`/ayuda` `/manual` `/servercheck` `/estado` `/bloqueados` `/respuestas`
 `/purgar` `/id`) only run in **#General**; topic actions (`/resuelto` `/pendiente` `/bloquear`
-`/desbloquear` `/general`) only run inside a user topic.
+`/desbloquear` `/compartir`) only run inside a user topic.
 
 ## Setup — step by step
 
