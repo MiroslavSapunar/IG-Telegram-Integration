@@ -123,14 +123,18 @@ bot.command('general', async (ctx) => {
 bot.command('bloquear', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
   if (!igsid) return ctx.reply('Usá /bloquear dentro del tema del usuario.');
+  const wasBlocked = !!q.isBlocked.get(igsid);              // only announce a real unblocked -> blocked change
   q.block.run(igsid, Date.now());
   await ack(ctx, '🚫 Usuario bloqueado: no se reenviarán más mensajes suyos (no se bloquea en Instagram).');
+  if (!wasBlocked) await logToGeneral(ctx, q.threadFull.get(igsid), igsid, '🚫', 'bloqueado por');
 });
 bot.command('desbloquear', async (ctx) => {
   const igsid = igsidOfTopic(ctx);
   if (!igsid) return ctx.reply('Usá /desbloquear dentro del tema del usuario.');
+  const wasBlocked = !!q.isBlocked.get(igsid);
   q.unblock.run(igsid);
   await ack(ctx, '✅ Usuario desbloqueado.');
+  if (wasBlocked) await logToGeneral(ctx, q.threadFull.get(igsid), igsid, '✅', 'desbloqueado por');
 });
 bot.command('bloqueados', (ctx) => {
   const rows = q.blockedList.all();
