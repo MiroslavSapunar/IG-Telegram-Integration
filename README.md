@@ -126,4 +126,4 @@ End-to-end:
 - `telegram.js` — grammy bot: commands, handlers, topic lifecycle, status report, 2h cron
 - `data.db` — SQLite message log (gitignored)
 - `ARCHITECTURE.md` — design, Meta API constraints, and findings
-- `FLY.md` — Fly.io deploy cheatsheet
+- `FLY.md` — Fly.io deploy + backup cheatsheet

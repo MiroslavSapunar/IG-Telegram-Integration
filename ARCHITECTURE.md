@@ -93,6 +93,7 @@ schema + prepared statements + blocklist), `instagram.js` (IG Graph client + web
 - `fwd`: Telegram message ↔ IG message id (`mid`) — inbound forwards *and* outbound replies — for two-way reaction sync
 - `members`: Telegram `user_id` → message `count` in topics (not General), for `/respuestas`
 - `saved`: `(user_id, igsid)` → per-user topic bookmarks, for `/guardar` / `/guardados`
+- Backups: Fly volume snapshots (daily, ~30-day retention) + an on-demand manual `VACUUM INTO` dump pulled off-box — see FLY.md
 
 ### 4. Claude AI (planned, Phase 4)
 - DM text + FAQ context → suggested reply shown in the Telegram card for approve/edit
