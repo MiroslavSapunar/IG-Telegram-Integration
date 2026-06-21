@@ -36,7 +36,7 @@ IG user DMs the account (text or media)
 - **Attention = open/closed topic + ❗ badge**: an open topic (❗ in its name) needs the team; `/resuelto` closes it and drops the badge, a new DM reopens it, so handled chats leave the active list. Replies keep it open (for follow-ups); command acks self-delete so the preview stays the real conversation.
 - **Reactions sync both ways**: a member's emoji reaction in Telegram is mirrored onto the IG message, and an IG user's reaction (on their message or your reply) is mirrored back onto the Telegram message (mapped to Telegram's allowed set).
 - **`/estado`** lists open topics with the time left on each one's IG 24h reply window (`⚠️` under 6h, `⛔` expired); a 6h job auto-posts it into General when anything is open.
-- **New-version ping**: bump `version` in `package.json` and on the next deploy the bot posts `🚀 ¡Nueva versión X.Y.Z!` into #General (once per version).
+- **New-version ping** (currently disabled): bump `version` in `package.json` and — once the `announceVersion()` call is re-enabled — the bot posts `🚀 ¡Nueva versión X.Y.Z!` into #General on deploy (once per version).
 
 ## Commands
 

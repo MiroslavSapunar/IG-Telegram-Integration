@@ -366,7 +366,7 @@ async function announceVersion() {
 export function startBot() {
   // register the "/" autocomplete menu so it matches the handlers (no manual BotFather step)
   bot.api.setMyCommands(COMMANDS).catch((e) => console.error('setMyCommands:', e.description || e.message));
-  announceVersion();   // post to General if package.json's version changed since last boot
+  // announceVersion();   // DISABLED during rapid feature dev to avoid spamming General — re-enable when releases slow down
 
   // allowed_updates must list every update type we handle (it replaces the default, which omits reactions)
   bot.start({ allowed_updates: ['message', 'message_reaction'], onStart: () => console.log('telegram bot polling') });
