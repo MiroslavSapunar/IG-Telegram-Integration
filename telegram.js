@@ -18,6 +18,16 @@ const fmtLeft = (ms) => {
   return h ? `${h}h ${m}m` : `${m}m`;
 };
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// IG send error -> message for the topic. error_subcode 2534022 == 24h window expired.
+const igSendError = (e) => {
+  let code, sub;
+  try { ({ code, error_subcode: sub } = JSON.parse(e.message)); } catch {}
+  if (sub === 2534022 || code === 10)
+    return '⏰ No se pudo enviar: pasaron más de 24h desde el último mensaje de esta persona. ' +
+           'Instagram ya no permite responder por el bot. Respondé directamente desde la app de Instagram.';
+  return `❌ Falló el envío a IG: ${e.message}`;
+};
 // returns the formatted open-topics report, or null when nothing is open (one query; caller decides what null means)
 export function statusText(now = Date.now()) {
   const rows = q.openTopics.all();
@@ -242,7 +252,7 @@ bot.on('message:text', async (ctx) => {
     // leave the topic OPEN: a member may send follow-ups, and they're regulars who can't post once it's closed.
     // Closing is a deliberate /resuelto.
   } catch (e) {
-    await ctx.reply(`❌ IG send failed: ${e.message}`);       // e.g. outside 24h window
+    await ctx.reply(igSendError(e));
   }
 });
 // member reacts to a forwarded DM -> mirror the emoji onto the IG message (removing it -> unreact)
